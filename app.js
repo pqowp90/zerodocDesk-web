@@ -352,6 +352,7 @@ function connect() {
     if (!desk) { showEmpty('데스크탑 앱의 [리모트] → "새 기기 연결 QR"을 이 기기로 찍어 주세요'); return; }
     if (!sessions.size) showEmpty('데스크탑에 연결하는 중…');
     ws = ZDP2P.connect(desk.pub, desk.relays);
+    ws.onstatus = (s) => { if (!sessions.size) showEmpty(s); };
   } else {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`);

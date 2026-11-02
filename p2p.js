@@ -88,8 +88,15 @@
   }
 
   /** WebSocket-shaped connection over a WebRTC data channel. */
+  function summarize(sdp) {
+    const c = sdp.split('\n').filter((l) => l.startsWith('a=candidate'));
+    const n = (t) => c.filter((l) => l.includes(`typ ${t}`)).length;
+    return `host ${n('host')} · srflx ${n('srflx')} · relay ${n('relay')}`;
+  }
+
   function connect(desk, relays) {
-    const sock = { readyState: 0, onopen: null, onmessage: null, onclose: null, onerror: null };
+    const sock = { readyState: 0, onopen: null, onmessage: null, onclose: null, onerror: null, onstatus: null };
+    const status = (s) => { sock.status = s; sock.onstatus && sock.onstatus(s); };
     let pc = null;
     let dc = null;
     let closed = false;
@@ -110,17 +117,27 @@
       dc.onopen = () => { sock.readyState = 1; sock.onopen && sock.onopen(); };
       dc.onmessage = (e) => sock.onmessage && sock.onmessage({ data: e.data });
       dc.onclose = () => fin('channel closed');
+      let mine = '';
+      let theirs = '';
+      pc.oniceconnectionstatechange = () => status(`직접 연결 시도 중… (ICE: ${pc.iceConnectionState})\n이 기기: ${mine}\n데스크탑: ${theirs}`);
       pc.onconnectionstatechange = () => {
-        if (pc.connectionState === 'failed') fin('직접 연결에 실패했어요 (네트워크가 P2P를 막고 있을 수 있어요)');
+        if (pc.connectionState === 'failed') fin(`직접 연결에 실패했어요 (이 기기: ${mine} / 데스크탑: ${theirs})`);
       };
+      status('연결 준비 중… (내 주소 수집)');
       await pc.setLocalDescription(await pc.createOffer());
       await waitGathering(pc, 4000);
+      mine = summarize(pc.localDescription.sdp);
       const nonce = NT.utils.bytesToHex(crypto.getRandomValues(new Uint8Array(8)));
       const offer = { type: pc.localDescription.type, sdp: pc.localDescription.sdp };
+      status(`데스크탑에 접속 요청 보내는 중… (Nostr)\n이 기기: ${mine}`);
       const m = await signal(desk, relays, { type: 'offer', sdp: offer, nonce },
         (m) => (m.type === 'answer' || m.type === 'denied') && m.nonce === nonce, 25000);
       if (m.type === 'denied') { const e = new Error('이 기기는 짝 맺기가 해제됐어요. 데스크탑에서 QR로 다시 연결하세요.'); e.denied = true; throw e; }
+      theirs = summarize(m.sdp.sdp);
+      status(`데스크탑 응답 받음, 직접 연결 시도 중…\n이 기기: ${mine}\n데스크탑: ${theirs}`);
       await pc.setRemoteDescription(m.sdp);
+      // Browsers can sit in "checking" a long time before declaring failure.
+      setTimeout(() => { if (sock.readyState === 0) fin(`20초 안에 연결되지 않았어요 (ICE: ${pc.iceConnectionState} · 이 기기: ${mine} / 데스크탑: ${theirs})`); }, 20000);
     })().catch((e) => { sock.lastError = e; fin(e.message); });
 
     return sock;
