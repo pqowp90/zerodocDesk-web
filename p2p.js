@@ -108,6 +108,7 @@
       sock.onclose && sock.onclose({ reason: reason || '' });
     };
     sock.send = (s) => { if (dc && dc.readyState === 'open') dc.send(s); };
+    Object.defineProperty(sock, 'bufferedAmount', { get: () => (dc ? dc.bufferedAmount : 0) });
     sock.close = () => fin('closed');
 
     (async () => {
