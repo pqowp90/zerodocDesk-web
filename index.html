@@ -9,6 +9,7 @@
 </head>
 <body>
   <header id="bar">
+    <button id="side-toggle" class="icon" title="프로젝트 목록 (Ctrl+B)">☰</button>
     <div id="tabs"></div>
     <button id="new-claude" class="act" title="새 Claude 탭 (Ctrl+Shift+T)">+ Claude</button>
     <button id="new-shell" class="act ghost" title="새 셸 탭">+ 셸</button>
@@ -16,7 +17,17 @@
     <button id="remote-btn" class="act ghost" title="리모트 접속">리모트</button>
   </header>
 
-  <main id="terms"></main>
+  <div id="workspace">
+    <aside id="side">
+      <div class="side-head">
+        <span>프로젝트</span>
+        <button id="add-folder" class="icon" title="폴더 추가">＋</button>
+        <button id="refresh-projects" class="icon" title="새로고침">⟳</button>
+      </div>
+      <div id="projects"><div class="side-empty">불러오는 중…</div></div>
+    </aside>
+    <main id="terms"></main>
+  </div>
 
   <!-- touch devices only: keys a phone keyboard doesn't have -->
   <nav id="keys">

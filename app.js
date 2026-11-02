@@ -152,37 +152,132 @@ function closeTab(id) {
   send({ t: 'close', id });
 }
 
-function newTab(claude) {
+/** Asks the server for a new tab; the tab that appears next gets focus. */
+function newTab(claude, extra = {}) {
   const ref = active !== null && sessions.get(active);
-  send({ t: 'create', claude, cols: ref ? ref.term.cols : 120, rows: ref ? ref.term.rows : 30 });
+  // Default folder for "+ Claude": the active tab's folder.
+  if (!extra.cwd && ref) extra.cwd = ref.info.cwd;
+  wantActivate++;
+  send({ t: 'create', claude, cols: ref ? ref.term.cols : 120, rows: ref ? ref.term.rows : 30, ...extra });
+}
+let wantActivate = 0;
+
+// ---- sidebar: projects and their past Claude conversations ----
+let projects = [];
+let openProjects = new Set();
+try { openProjects = new Set(JSON.parse(load('zd-open') || '[]')); } catch {}
+const showAll = new Set();
+
+function ago(sec) {
+  const d = Date.now() / 1000 - sec;
+  if (d < 60) return '방금';
+  if (d < 3600) return `${Math.floor(d / 60)}분`;
+  if (d < 86400) return `${Math.floor(d / 3600)}시간`;
+  if (d < 86400 * 30) return `${Math.floor(d / 86400)}일`;
+  return new Date(sec * 1000).toLocaleDateString();
 }
 
-function globalShortcut(e) {
-  if (e.ctrlKey && e.shiftKey && e.code === 'KeyT') { newTab(true); return true; }
-  if (e.ctrlKey && e.shiftKey && e.code === 'KeyW') { if (active !== null) closeTab(active); return true; }
-  if (e.ctrlKey && e.key === 'Tab') {
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+function renderProjects() {
+  const box = $('#projects');
+  if (!projects.length) { box.replaceChildren(el('div', 'side-empty', 'Claude 대화 기록이 없어요. ＋로 폴더를 추가하세요.')); return; }
+  box.replaceChildren(...projects.map((p) => {
+    const wrap = el('div', 'proj' + (openProjects.has(p.path) ? ' open' : ''));
+    const head = el('div', 'proj-head');
+    head.title = p.path;
+    const caret = el('span', 'caret', openProjects.has(p.path) ? '▾' : '▸');
+    const name = el('span', 'pname', p.name);
+    const add = el('button', 'icon new', '＋');
+    add.title = `${p.name} 에서 새 대화`;
+    add.onclick = (e) => { e.stopPropagation(); newTab(true, { cwd: p.path, title: p.name }); };
+    head.append(caret, name, add);
+    head.onclick = () => {
+      openProjects.has(p.path) ? openProjects.delete(p.path) : openProjects.add(p.path);
+      store('zd-open', JSON.stringify([...openProjects]));
+      renderProjects();
+    };
+    const list = el('div', 'proj-list');
+    const limit = showAll.has(p.path) ? p.sessions.length : 8;
+    for (const s of p.sessions.slice(0, limit)) {
+      const row = el('div', 'sess');
+      row.title = `${s.title}\n이어서 열기 (claude --resume)`;
+      row.append(el('span', 'stitle', s.title), el('span', 'when', ago(s.mtime)));
+      row.onclick = () => { newTab(true, { cwd: p.path, resume: s.id, title: s.title.slice(0, 30) }); if (narrow()) toggleSide(false); };
+      list.append(row);
+    }
+    if (p.sessions.length > limit) {
+      const more = el('div', 'sess-more', `이전 대화 ${p.sessions.length - limit}개 더 보기`);
+      more.onclick = () => { showAll.add(p.path); renderProjects(); };
+      list.append(more);
+    }
+    if (!p.sessions.length) list.append(el('div', 'side-empty', '아직 대화가 없어요'));
+    wrap.append(head, list);
+    return wrap;
+  }));
+}
+
+const narrow = () => matchMedia('(max-width: 800px)').matches;
+function toggleSide(show) {
+  const hidden = show === undefined ? !document.body.classList.contains('side-hidden') : !show;
+  document.body.classList.toggle('side-hidden', hidden);
+  if (!narrow()) store('zd-side', hidden ? '0' : '1');
+  if (!hidden) send({ t: 'projects' });
+  requestAnimationFrame(() => { if (active !== null) sessions.get(active)?.fit.fit(); });
+}
+if (narrow() || load('zd-side') === '0') document.body.classList.add('side-hidden');
+$('#side-toggle').onclick = () => toggleSide();
+$('#refresh-projects').onclick = () => send({ t: 'projects' });
+$('#add-folder').onclick = () => {
+  const p = prompt('추가할 폴더 경로 (예: X:\\Github\\내프로젝트)');
+  if (p) { send({ t: 'addfolder', path: p }); setTimeout(() => send({ t: 'projects' }), 300); }
+};
+setInterval(() => { if (!document.body.classList.contains('side-hidden')) send({ t: 'projects' }); }, 60000);
+
+/** The app-level action for a key event, or null if the key belongs to the terminal. */
+function shortcutFor(e) {
+  if (e.ctrlKey && e.shiftKey && e.code === 'KeyT') return () => newTab(true);
+  if (e.ctrlKey && !e.shiftKey && e.code === 'KeyB') return () => toggleSide();
+  if (e.ctrlKey && e.shiftKey && e.code === 'KeyW') return () => { if (active !== null) closeTab(active); };
+  if (e.ctrlKey && e.key === 'Tab') return () => {
     const ids = [...sessions.keys()];
     if (ids.length) activate(ids[(ids.indexOf(active) + (e.shiftKey ? ids.length - 1 : 1)) % ids.length]);
-    return true;
-  }
-  if (e.ctrlKey && (e.key === '=' || e.key === '+' || e.key === '-' || e.key === '0')) {
+  };
+  if (e.ctrlKey && (e.key === '=' || e.key === '+' || e.key === '-' || e.key === '0')) return () => {
     fontSize = e.key === '0' ? (touch ? 12 : 14) : Math.min(28, Math.max(8, fontSize + (e.key === '-' ? -1 : 1)));
     store('zd-font', String(fontSize));
     for (const s of sessions.values()) s.term.options.fontSize = fontSize;
     if (active !== null) activate(active);
-    return true;
-  }
-  return false;
+  };
+  return null;
 }
-addEventListener('keydown', (e) => { if (globalShortcut(e)) e.preventDefault(); });
+/** Terminal side: only claims the key; the window listener below runs the action once. */
+function globalShortcut(e) { return shortcutFor(e) !== null; }
+addEventListener('keydown', (e) => {
+  const act = shortcutFor(e);
+  if (act) { e.preventDefault(); act(); }
+});
 
 // ---- messages ----
 function onSessions(list) {
   const seen = new Set();
+  let created = null;
   for (const info of list) {
     seen.add(info.id);
     const s = sessions.get(info.id);
-    if (s) s.info = info; else makeSession(info);
+    if (s) s.info = info; else { makeSession(info); created = info.id; }
+  }
+  // A tab we asked for just appeared: switch to it.
+  if (created !== null && wantActivate > 0) {
+    wantActivate--;
+    for (const id of [...sessions.keys()]) if (!seen.has(id)) dropSession(id);
+    activate(created);
+    return;
   }
   for (const id of [...sessions.keys()]) if (!seen.has(id)) dropSession(id);
   if (active === null || !sessions.has(active)) {
@@ -271,6 +366,7 @@ function connect() {
     if (p2pMode) toast('데스크탑에 연결됐어요', 2000);
     // Re-attach everything we already show: output during the gap is in the server's scrollback.
     for (const s of sessions.values()) send({ t: 'attach', id: s.id });
+    if (!document.body.classList.contains('side-hidden')) send({ t: 'projects' });
   };
   ws.onmessage = (ev) => {
     if (typeof ev.data !== 'string') return onFrame(ev.data);
@@ -278,6 +374,7 @@ function connect() {
     if (m.t === 'sessions') onSessions(m.list);
     else if (m.t === 'remote') onRemote(m);
     else if (m.t === 'pairing') onPairing(m);
+    else if (m.t === 'projects') { projects = m.list; renderProjects(); }
     else if (m.t === 'error') toast(m.msg);
   };
   ws.onclose = (ev) => {
