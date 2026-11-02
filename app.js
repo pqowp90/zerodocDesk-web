@@ -147,8 +147,6 @@ function renderTabs() {
 }
 
 function closeTab(id) {
-  const s = sessions.get(id);
-  if (s && s.info.alive && !confirm('이 탭의 프로세스를 종료할까요?')) return;
   send({ t: 'close', id });
 }
 
