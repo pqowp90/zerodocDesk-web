@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
+  <title>zerodocDesk</title>
+  <link rel="stylesheet" href="vendor/xterm.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header id="bar">
+    <div id="tabs"></div>
+    <button id="new-claude" class="act" title="새 Claude 탭 (Ctrl+Shift+T)">+ Claude</button>
+    <button id="new-shell" class="act ghost" title="새 셸 탭">+ 셸</button>
+    <span id="conn" class="dot off" title="연결 상태"></span>
+    <button id="remote-btn" class="act ghost" title="리모트 접속">리모트</button>
+  </header>
+
+  <main id="terms"></main>
+
+  <!-- touch devices only: keys a phone keyboard doesn't have -->
+  <nav id="keys">
+    <button data-k="esc">Esc</button>
+    <button data-k="tab">Tab</button>
+    <button data-k="stab" title="Shift+Tab (모드 전환)">⇧Tab</button>
+    <button data-k="up">↑</button>
+    <button data-k="down">↓</button>
+    <button data-k="ctrlc">^C</button>
+    <button data-k="nl" title="줄바꿈 (전송 안 함)">⏎줄</button>
+    <button data-k="enter">Enter</button>
+  </nav>
+
+  <section id="remote" hidden>
+    <h2>어디서나 접속 (P2P)</h2>
+    <p class="hint">폰·다른 PC로 QR을 찍으면 짝이 맺어져요. 이후엔 어느 네트워크에서든 <b id="web-url"></b> 을 열면 이 PC에 바로 연결돼요. 데이터는 서버를 거치지 않고 기기끼리 직접 오가요.</p>
+    <button id="pair-btn" class="act">새 기기 연결 QR</button>
+    <div id="pair-box" hidden>
+      <div id="pair-qr"></div>
+      <p class="hint" id="pair-ttl"></p>
+    </div>
+    <div id="paired"></div>
+    <p class="hint" id="peers"></p>
+
+    <h2 class="sub">같은 Wi-Fi (LAN)</h2>
+    <label class="switch"><input type="checkbox" id="remote-on"> 같은 네트워크에서 주소로 접속 허용</label>
+    <div id="remote-urls"></div>
+    <p class="hint">주소에 든 토큰이 비밀번호 역할을 하니 남에게 보여 주지 마세요.</p>
+    <button id="remote-close" class="act ghost">닫기</button>
+  </section>
+
+  <div id="toast" hidden></div>
+
+  <script src="vendor/xterm.js"></script>
+  <script src="vendor/addon-fit.js"></script>
+  <script src="vendor/nostr.bundle.js"></script>
+  <script src="p2p.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
