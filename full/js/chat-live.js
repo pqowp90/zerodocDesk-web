@@ -331,6 +331,8 @@ function updateChatMenu(s) {
     list.append(b);
   });
   parts.push(list);
+  // Text between the options and the key hint (an older desktop app sends none).
+  if (m.note) parts.push(el('div', 'mtitle mnote', m.note));
   const foot = el('div', 'mfoot');
   const esc = el('button', 'act ghost', '취소 (Esc)');
   esc.type = 'button';

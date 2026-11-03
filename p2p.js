@@ -116,7 +116,18 @@
       dc = pc.createDataChannel('zd', { ordered: true });
       dc.binaryType = 'arraybuffer';
       dc.onopen = () => { sock.readyState = 1; sock.onopen && sock.onopen(); };
-      dc.onmessage = (e) => sock.onmessage && sock.onmessage({ data: e.data });
+      let part = ''; // a long text message arriving in pieces
+      dc.onmessage = (e) => {
+        let data = e.data;
+        // Long text comes in pieces (zd-remote `text_pieces`): "\x01" + "0" (more) / "1" (last) + a slice.
+        if (typeof data === 'string' && data.charCodeAt(0) === 1) {
+          part += data.slice(2);
+          if (data[1] !== '1') return;
+          data = part;
+          part = '';
+        }
+        sock.onmessage && sock.onmessage({ data });
+      };
       dc.onclose = () => fin('channel closed');
       let mine = '';
       let theirs = '';

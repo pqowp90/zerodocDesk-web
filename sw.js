@@ -10,7 +10,8 @@ self.addEventListener('install', () => self.skipWaiting());
 
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => {
-    for (const k of await caches.keys()) if (k !== CACHE) await caches.delete(k);
+    // Only our own older copies: 'zd-webui' is the loader's (screens received from desktops).
+    for (const k of await caches.keys()) if (k.startsWith('deskdoc-') && k !== CACHE) await caches.delete(k);
     await self.clients.claim();
   })());
 });

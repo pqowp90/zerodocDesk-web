@@ -17,7 +17,6 @@ for (const r of document.querySelectorAll('input[name="upd-mode"]')) {
     if (upd) onUpdate(upd);
   };
 }
-$('#upd-dev').onchange = (e) => updAction(e.target.checked ? 'channel_dev' : 'channel_stable');
 
 function onUpdate(m) {
   if (!canUpdate) return;
@@ -70,9 +69,6 @@ function renderUpdate() {
     }[m.state] || (m.available && m.dev ? '개발 빌드라 자동으로 받지 않아요.' : '');
   const checked = m.checked_at ? `마지막 확인 ${ago(m.checked_at)}${ago(m.checked_at) === '방금' ? '' : ' 전'}` : '';
   $('#upd-state').textContent = [m.required && m.available ? '이 버전은 지원이 끝났어요.' : '', state, checked].filter(Boolean).join(' · ');
-  $('#upd-dev').checked = m.channel === 'dev';
-  // Newer apps follow one channel of their own (DeskDoc / DeskDoc Dev): no switch to show.
-  $('#upd-ch-row').hidden = !!m.channel_fixed;
   if (m.available && m.latest_channel === 'dev') $('#upd-ver').textContent += ' (개발 버전)';
   $('#upd-error').hidden = !m.error;
   $('#upd-error').textContent = m.error || '';

@@ -565,6 +565,7 @@ body.chat-on #chat-rail:not([hidden]) { display: block; }
 #chat .chat-menu.busy { opacity: .6; pointer-events: none; }
 #chat .chat-menu .mtitle { margin-bottom: 10px; font: 13px/1.6 var(--mono, ui-monospace, Consolas, monospace); white-space: pre-wrap; word-break: break-word; }
 #chat .chat-menu .mopts { display: flex; flex-direction: column; gap: 6px; }
+#chat .chat-menu .mnote { margin: 10px 0 0; color: var(--dim); }
 #chat .chat-menu .mopt { display: grid; grid-template-columns: auto 1fr; column-gap: 10px; align-items: baseline; width: 100%;
   padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text);
   font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
@@ -616,10 +617,10 @@ body.chat-on #compose-text { font-size: 15px; padding: 4px 8px; }
 #upd-notes li { margin: 3px 0; }
 #upd-bar { height: 6px; border-radius: 3px; background: var(--bg); overflow: hidden; margin: 8px 0; }
 #upd-bar > div { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
-#upd-ch-row, .set-row { display: flex; gap: 10px; align-items: flex-start; margin: 12px 0 0; padding-top: 10px;
+.set-row { display: flex; gap: 10px; align-items: flex-start; margin: 12px 0 0; padding-top: 10px;
   border-top: 1px solid var(--line); font-size: 13px; }
-#upd-ch-row > label:last-child, .set-row > label:last-child { cursor: pointer; }
-#upd-ch-row .hint, .set-row .hint { display: block; margin: 2px 0 0; }
+.set-row > label:last-child { cursor: pointer; }
+.set-row .hint { display: block; margin: 2px 0 0; }
 #upd-mode { margin-top: 22px; }
 #upd-mode[hidden] { display: none; }
 #upd-mode h3 { margin: 0; font-size: 13px; }

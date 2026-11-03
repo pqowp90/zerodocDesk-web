@@ -11,7 +11,8 @@ function connect() {
   if (p2pMode) {
     if (!desk) { showUnpaired(); return; }
     if (!sessions.size) showEmpty('데스크탑에 연결하는 중…');
-    ws = ZDP2P.connect(desk.pub, desk.relays);
+    // On the hosted page the loader fetched this screen over a connection: take that one over (once).
+    ws = (window.ZDBOOT && ZDBOOT.take()) || ZDP2P.connect(desk.pub, desk.relays);
     ws.onstatus = (s) => { if (!sessions.size) showEmpty(s); };
   } else {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -29,6 +30,9 @@ function connect() {
     watching = undefined; // the server forgot what we watched: ask again
     syncChat(true);
     syncWindowTheme();
+    // Hosted page, reconnected: the desktop may have been updated meanwhile. Its screen then
+    // differs from this one, and the loader reloads into the new one ({t:"webui"} below).
+    if (window.ZDBOOT && ZDBOOT.hash && sock.reconnected) send({ t: 'webui', have: ZDBOOT.hash });
   };
   ws.onmessage = (ev) => {
     if (typeof ev.data !== 'string') return onFrame(ev.data);
@@ -58,6 +62,8 @@ function connect() {
     else if (m.t === 'skill_done') onSkillDone(m);
     // An older desktop app without the chat stream: stay on the terminal.
     else if (m.t === 'file') onFile(m);
+    else if (m.t === 'webui') window.ZDBOOT?.onWebui(m);
+    else if (m.t === 'error' && /variant `webui`/.test(m.msg)) {} // an older desktop app: keep this screen
     // An older desktop app doesn't know these messages (the rejection lists every message it
     // does know, so match the unknown one's own name).
     else if (m.t === 'error' && /variant `complete`/.test(m.msg)) { acOff = true; acClose(); }
@@ -73,6 +79,7 @@ function connect() {
     showConn(false);
     for (const b of document.querySelectorAll('.ubtn.busy')) b.classList.remove('busy'); // its answer is lost
     if (sock.lastError && sock.lastError.denied) {
+      window.ZDBOOT?.forget(desk.pub);
       store('zd-desk', ''); desk = null;
       showEmpty(sock.lastError.message);
       return;
@@ -84,13 +91,20 @@ function connect() {
     // P2P retries cost relay round-trips: back off further.
     retry = Math.min(retry * 2, p2pMode ? 30000 : 5000);
   };
+  if (sock.taken) {
+    // Already open (handed over by the loader): what arrived meanwhile comes now, after `onopen`.
+    sock.onopen();
+    sock.replay();
+  } else sock.reconnected = connected;
+  connected = true;
 }
+let connected = false; // a connection was open before (the next one is a reconnect)
 
 // ---- pairing and the installable app (hosted page only) ----
 const hosted = p2pMode && !isDesktop;
 const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 const iOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-let installPrompt = null; // Chrome's deferred install offer
+let installPrompt = window.ZDBOOT?.installPrompt || null; // Chrome's deferred install offer (the loader may have caught it)
 let pairError = '';       // why the last pairing failed, shown on the "not paired" screen
 
 /**

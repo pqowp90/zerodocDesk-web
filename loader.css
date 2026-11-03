@@ -1,0 +1,22 @@
+/* The hosted loader's own screen (pairing, picking a PC, connecting). Removed once the
+   desktop's screen takes over. */
+:root { --bg: #1e2026; --fg: #e6e6e6; --dim: #9aa0aa; --card: #2a2d35; --line: #3a3e48; --acc: #6aa1ff; }
+:root[data-theme="light"] { --bg: #f6f7f9; --fg: #1d1f24; --dim: #5d6470; --card: #ffffff; --line: #d9dce2; --acc: #2f6fe0; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+#boot { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px 16px; text-align: center; }
+.logo { width: 72px; height: 72px; border-radius: 16px; }
+h1 { margin: 0; font-size: 20px; }
+#msg { margin: 0; max-width: 420px; color: var(--dim); white-space: pre-line; }
+#pick { display: flex; flex-direction: column; gap: 8px; width: 100%; max-width: 320px; }
+#pick button, #acts button, #paste button {
+  font: inherit; color: var(--fg); background: var(--card); border: 1px solid var(--line);
+  border-radius: 10px; padding: 10px 14px; cursor: pointer;
+}
+#pick button { text-align: left; }
+#pick small { display: block; color: var(--dim); font-size: 12px; }
+#acts { display: flex; gap: 8px; }
+#paste { display: flex; gap: 8px; width: 100%; max-width: 420px; }
+#paste input { flex: 1; min-width: 0; font: inherit; color: var(--fg); background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+#paste button, #retry { border-color: var(--acc); }
+[hidden] { display: none !important; }
