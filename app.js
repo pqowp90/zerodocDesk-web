@@ -1265,6 +1265,8 @@ addEventListener('pagehide', saveDrafts);
 document.addEventListener('visibilitychange', () => { if (document.hidden) saveDrafts(); });
 /** @type {{uid:string, url:string, path:string|null}[]} */
 let atts = [];
+/** Text quoted from the conversation: chips above the box, sent as "> …" ahead of the text. */
+let quotes = [];
 let sendWhenUploaded = false;
 const IMG_EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' };
 const UPLOAD_MAX = 20 * 1024 * 1024;
@@ -1310,6 +1312,33 @@ function renderAtts() {
     box.title = a.path || '올리는 중…';
     return box;
   }));
+}
+
+function renderQuotes() {
+  updateSend();
+  $('#quote-list').replaceChildren(...quotes.map((q) => {
+    const box = el('div', 'qchip');
+    box.title = q;
+    const x = el('button', 'x', '×');
+    x.type = 'button';
+    x.title = '인용 빼기';
+    x.onclick = () => { quotes = quotes.filter((o) => o !== q); renderQuotes(); focusInput(); };
+    box.append(el('span', 'qmark', '❝'), el('span', 'qt', q.replace(/\s+/g, ' ')), x);
+    return box;
+  }));
+}
+
+/** What the box sends: the quotes as Markdown block quotes, then the typed text. */
+function composeText() {
+  const text = ta.value.replace(/\r\n/g, '\n');
+  if (!quotes.length) return text;
+  const q = quotes.map((t) => t.split('\n').map((l) => (l.trim() ? `> ${l}` : '>')).join('\n')).join('\n\n');
+  return text.trim() ? `${q}\n\n${text}` : q;
+}
+
+function clearQuotes() {
+  quotes = [];
+  renderQuotes();
 }
 
 function removeAtt(a) {
@@ -1359,15 +1388,24 @@ function onUploaded(m) {
 async function sendCompose() {
   if (active === null) return;
   const s = sessions.get(active);
-  const text = ta.value.replace(/\r\n/g, '\n');
+  const text = composeText();
   if (atts.some((a) => !a.path)) { sendWhenUploaded = true; toast('이미지를 다 올리면 보낼게요', 2000); return; }
   if (!text && !atts.length) { input(s.id, '\r'); return; } // empty Enter: confirm menus etc.
   // Claude is still starting: keys typed now can be lost, so hold it until its prompt is up.
   if (notReady(s)) { holdCompose(); return; }
+  // A menu is waiting: typed into it, the message would be lost (or pick something). Hold it
+  // until the menu is answered. A question with a free-text option takes the typing, so not there.
+  const m = s.info.claude && s.info.menu;
+  if (m && !m.options.some((o) => /^type something/i.test(o.label))) {
+    holdCompose();
+    toast('메뉴에 먼저 답해 주세요. 답하면 이 메시지를 보낼게요', 3000);
+    return;
+  }
   const sent = atts;
   atts = [];
   ta.value = '';
   drafts.delete(s.id);
+  clearQuotes();
   growInput();
   renderAtts();
   await deliver(s, text, sent);
@@ -1394,14 +1432,18 @@ async function deliver(s, text, sent) {
 
 /** Keys that go to the terminal instead of the box. */
 function passKey(e) {
-  const empty = !ta.value && !atts.length;
+  const empty = !ta.value && !atts.length && !quotes.length;
   if (e.key === 'Escape') return '\x1b';
   if (e.key === 'Tab' && !e.ctrlKey && !e.altKey) return e.shiftKey ? '\x1b[Z' : '\t';
   if (e.ctrlKey && !e.shiftKey && !e.altKey && e.code === 'KeyC' && ta.selectionStart === ta.selectionEnd) return '\x03';
   if (empty && !e.ctrlKey && !e.altKey && !e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
     moveMenuSel(e.key === 'ArrowUp' ? -1 : 1);
-    const app = sessions.get(active)?.term.modes.applicationCursorKeysMode;
-    return (app ? '\x1bO' : '\x1b[') + (e.key === 'ArrowUp' ? 'A' : 'B');
+    return arrowKey(sessions.get(active), e.key === 'ArrowUp' ? 'A' : 'B');
+  }
+  // ←/→ change a value in a settings-style menu.
+  if (empty && !e.ctrlKey && !e.altKey && !e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+    const s = sessions.get(active);
+    if (s?.info.menu) return arrowKey(s, e.key === 'ArrowLeft' ? 'D' : 'C');
   }
   return null;
 }
@@ -1409,6 +1451,13 @@ function passKey(e) {
 ta.addEventListener('keydown', (e) => {
   if (e.isComposing || e.keyCode === 229) return; // IME is composing (Korean etc.)
   if (active === null) return;
+  // Backspace at the very start of the box takes off the last quote chip, whole.
+  if (e.key === 'Backspace' && quotes.length && ta.selectionStart === 0 && ta.selectionEnd === 0) {
+    e.preventDefault();
+    quotes.pop();
+    renderQuotes();
+    return;
+  }
   if (e.key === 'Enter' && !e.shiftKey && !e.altKey && !e.ctrlKey && !touch) {
     e.preventDefault();
     sendCompose();
@@ -1445,7 +1494,7 @@ function workingTab() {
 }
 function updateSend() {
   const busy = !!workingTab();
-  const has = !!(ta.value.trim() || atts.length);
+  const has = !!(ta.value.trim() || atts.length || quotes.length);
   $('#send-btn').hidden = busy;
   $('#send-btn').classList.toggle('idle', !has);
   $('#stop-btn').hidden = !busy || has;
@@ -1456,7 +1505,7 @@ function updateSend() {
 function renderQueue() {
   const list = (active !== null && queued.get(active)) || [];
   const s = active !== null && sessions.get(active);
-  const label = s && notReady(s) ? '준비되면 전송' : '끝나면 전송';
+  const label = s && notReady(s) ? '준비되면 전송' : s && s.info.asking && !s.info.busy ? '답하면 전송' : '끝나면 전송';
   $('#queue-list').replaceChildren(...list.map((q) => {
     const row = el('div', 'qi');
     const x = el('button', '', '×');
@@ -1478,7 +1527,7 @@ function renderQueue() {
 function holdCompose() {
   const s = active !== null && sessions.get(active);
   if (!s) return;
-  const text = ta.value.replace(/\r\n/g, '\n');
+  const text = composeText();
   if (!text.trim() && !atts.length) return;
   const wait = s.info.claude && s.info.alive && (s.info.busy || s.info.asking || notReady(s)
     || queued.get(s.id)?.length || Date.now() - (s.sentAt || 0) < 3000);
@@ -1489,6 +1538,7 @@ function holdCompose() {
   atts = [];
   ta.value = '';
   drafts.delete(s.id);
+  clearQuotes();
   growInput();
   renderAtts();
   ta.focus();
@@ -2255,6 +2305,7 @@ chat.addEventListener('click', (e) => {
 function chatItemEl(it) {
   if (it.k === 'user') {
     const d = el('div', 'msg user', it.text);
+    d.dataset.q = it.text || (it.images?.length ? `🖼 이미지 ${it.images.length}장` : '');
     const thumbs = imgThumbs((it.text.match(TEXT_PATH_RE) || []).map(trimTextPath), it.images || []);
     if (!thumbs) return d;
     // Only images: they go in the bubble rather than under an empty one.
@@ -2424,7 +2475,56 @@ function renderChat(force) {
   const pendNew = renderChatPending(pend, s.info.busy);
   if (pend.length) chatCol.append(chatPend);
   if (force || atBottom || menuNew || pendNew) chat.scrollTop = chat.scrollHeight;
+  updateChatHead();
 }
+
+// ---- the question being answered, pinned at the top ----
+// Once a question's bubble scrolls off the top, a copy (a few lines) stays pinned there while its
+// answer is read. The next question pushes it out as it comes up. Clicking it goes back to it.
+const chatHead = el('div', 'chat-head');
+const chatHeadIn = el('div', 'ch-in');
+const chatHeadQ = el('button', 'ch-q');
+chatHeadQ.type = 'button';
+chatHeadQ.title = '이 질문으로 가기';
+const chatHeadT = el('span', 'ch-t'); // a span inside: line clamping doesn't work on a button itself
+chatHeadQ.append(chatHeadT);
+chatHeadIn.append(chatHeadQ);
+chatHead.append(chatHeadIn);
+chat.prepend(chatHead);
+let headFor = null; // the bubble chatHead shows
+let headRaf = 0;
+
+function updateChatHead() {
+  const top = chat.getBoundingClientRect().top;
+  const qs = chatCol.querySelectorAll('.msg.user:not(.pending)');
+  // The last question whose bubble has gone above the top; the one after it is the next.
+  let cur = null;
+  let next = null;
+  for (const q of qs) {
+    if (q.getBoundingClientRect().bottom <= top + 4) cur = q;
+    else { next = q; break; }
+  }
+  const on = !!(cur && chatShown() && cur.dataset.q);
+  chatHeadIn.classList.toggle('on', on);
+  if (!on) return;
+  if (cur !== headFor) {
+    headFor = cur;
+    chatHeadT.textContent = cur.dataset.q;
+  }
+  // The next question coming up pushes this one out of the way.
+  const h = chatHeadQ.offsetHeight + 12;
+  const gap = next ? next.getBoundingClientRect().top - top : Infinity;
+  chatHeadIn.style.setProperty('--push', `${Math.min(0, gap - h)}px`);
+}
+
+chat.addEventListener('scroll', () => {
+  if (!headRaf) headRaf = requestAnimationFrame(() => { headRaf = 0; updateChatHead(); });
+}, { passive: true });
+addEventListener('resize', () => updateChatHead());
+chatHeadQ.onclick = () => {
+  if (!headFor?.isConnected) return;
+  chat.scrollTo({ top: chat.scrollTop + headFor.getBoundingClientRect().top - chat.getBoundingClientRect().top - 12, behavior: 'smooth' });
+};
 
 // Messages sent but not yet in the transcript (see addPending), under everything else.
 const chatPend = el('div', 'chat-pend');
@@ -2463,7 +2563,17 @@ function updateChatMenu(s) {
   m.options.forEach((o, i) => {
     const b = el('button', 'mopt');
     b.type = 'button';
-    b.append(el('span', 'mnum', `${o.num ?? i + 1}`), el('span', 'mlabel', o.label));
+    // A menu without numbers (settings-style dialog) sends num: null; an older desktop app none.
+    if (o.num !== null) {
+      b.append(el('span', 'mnum', `${o.num ?? i + 1}`), el('span', 'mlabel', o.label));
+    } else {
+      // "Also scan shell history     true": the setting, then its value on the right.
+      b.classList.add('plain');
+      const [name, ...val] = o.label.split(/\s{2,}/);
+      const lab = el('span', 'mlabel', name);
+      if (val.length) lab.append(el('span', 'mval', val.join('  ')));
+      b.append(lab);
+    }
     if (o.desc) b.append(el('span', 'mdesc', o.desc));
     b.onclick = () => pickMenu(s.id, i);
     list.append(b);
@@ -2477,7 +2587,18 @@ function updateChatMenu(s) {
   peek.type = 'button';
   peek.title = '이 메뉴만 터미널에서 직접 골라요. 답하면 대화창으로 돌아와요.';
   peek.onclick = () => { termPeek = s.id; syncChat(true); focusInput(); };
-  foot.append(esc, peek, el('span', 'mhint', '↑↓ · Enter로도 고를 수 있어요'));
+  foot.append(esc, peek);
+  // Dialogs whose rows hold a value ("←/→ to change"): buttons for that, and the hint as shown.
+  if (m.hint && m.hint.includes('←')) {
+    for (const [label, k] of [['◀', 'D'], ['▶', 'C']]) {
+      const b = el('button', 'act ghost', label);
+      b.type = 'button';
+      b.title = '고른 줄의 값 바꾸기';
+      b.onclick = () => { input(s.id, arrowKey(s, k)); ta.focus(); };
+      foot.append(b);
+    }
+  }
+  foot.append(el('span', 'mhint', m.hint && m.options.every((o) => o.num === null) ? m.hint : '↑↓ · Enter로도 고를 수 있어요'));
   parts.push(foot);
   chatMenu.classList.remove('busy');
   chatMenu.replaceChildren(...parts);
@@ -2496,6 +2617,11 @@ function moveMenuSel(d) {
   paintMenuSel();
 }
 
+/** The arrow key sequence for direction `k` (A up, B down, C right, D left) in tab `s`'s mode. */
+function arrowKey(s, k) {
+  return (s?.term.modes.applicationCursorKeysMode ? '\x1bO' : '\x1b[') + k;
+}
+
 /** Moves Claude's highlight to option `i` with arrow keys, then Enter. */
 async function pickMenu(id, i) {
   const s = sessions.get(id);
@@ -2506,8 +2632,7 @@ async function pickMenu(id, i) {
   const d = i - menuSel;
   menuSel = i;
   paintMenuSel();
-  const app = s.term.modes.applicationCursorKeysMode;
-  const key = (app ? '\x1bO' : '\x1b[') + (d < 0 ? 'A' : 'B');
+  const key = arrowKey(s, d < 0 ? 'A' : 'B');
   for (let k = 0; k < Math.abs(d); k++) { input(id, key); await sleep(25); }
   input(id, '\r');
   ta.focus();
@@ -2523,6 +2648,65 @@ chat.addEventListener('keydown', (e) => {
   }
 });
 for (const b of document.querySelectorAll('#mode button')) b.onclick = () => setChatPref(b.dataset.mode === 'chat');
+
+// ---- quote: select text in the conversation, then "인용" (or Ctrl+L) puts it in the input box ----
+const quoteBtn = el('button', 'quote-btn');
+quoteBtn.type = 'button';
+quoteBtn.append(el('span', '', '인용'), el('kbd', '', 'Ctrl+L'));
+quoteBtn.hidden = true;
+document.body.append(quoteBtn);
+let quoteDrag = false; // a mouse drag in the chat is still going: show the button once it ends
+
+/** The live selection's range when it is non-empty and inside the conversation, else null. */
+function quoteRange() {
+  if (!chatShown()) return null;
+  const sel = getSelection();
+  if (!sel || sel.isCollapsed || !sel.rangeCount || !sel.toString().trim()) return null;
+  const r = sel.getRangeAt(0);
+  return chatCol.contains(r.commonAncestorContainer) ? r : null;
+}
+
+function placeQuote() {
+  const r = !quoteDrag && quoteRange();
+  const rects = r ? [...r.getClientRects()].filter((x) => x.width || x.height) : [];
+  const box = chat.getBoundingClientRect();
+  const last = rects[rects.length - 1];
+  // Hidden while the selection's end is scrolled out of the conversation.
+  if (!last || last.bottom < box.top || last.top > box.bottom) { quoteBtn.hidden = true; return; }
+  quoteBtn.hidden = false;
+  const w = quoteBtn.offsetWidth, h = quoteBtn.offsetHeight;
+  // Below the end of the selection; above its start when that would leave the conversation.
+  let top = last.bottom + 6;
+  if (top + h > box.bottom - 4) top = Math.max(box.top + 4, rects[0].top - h - 6);
+  const left = Math.min(Math.max(box.left + 4, last.right - w / 2), box.right - w - 4);
+  quoteBtn.style.top = `${top}px`;
+  quoteBtn.style.left = `${left}px`;
+}
+
+/** Adds the selected text as a quote chip on the input box and moves focus there. */
+function quoteSel() {
+  if (!quoteRange()) return;
+  const q = getSelection().toString().replace(/\r/g, '').replace(/^\s+|\s+$/g, '');
+  getSelection().removeAllRanges();
+  quoteBtn.hidden = true;
+  if (!q) return;
+  quotes.push(q);
+  renderQuotes();
+  ta.focus();
+}
+
+quoteBtn.addEventListener('mousedown', (e) => e.preventDefault()); // keep the selection
+quoteBtn.addEventListener('click', quoteSel);
+chat.addEventListener('mousedown', (e) => { if (e.button === 0) { quoteDrag = true; quoteBtn.hidden = true; } });
+addEventListener('mouseup', () => { if (quoteDrag) { quoteDrag = false; requestAnimationFrame(placeQuote); } });
+let quoteTimer = 0;
+document.addEventListener('selectionchange', () => { clearTimeout(quoteTimer); quoteTimer = setTimeout(placeQuote, touch ? 250 : 60); });
+chat.addEventListener('scroll', () => { if (!quoteBtn.hidden || quoteRange()) placeQuote(); }, { passive: true });
+addEventListener('resize', () => { if (!quoteBtn.hidden) placeQuote(); });
+// Ctrl+L quotes only while there is a selection in the conversation; otherwise it stays the terminal's.
+addEventListener('keydown', (e) => {
+  if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.code === 'KeyL' || e.key.toLowerCase() === 'l') && quoteRange()) { e.preventDefault(); e.stopPropagation(); quoteSel(); }
+}, true);
 
 syncChat(true);
 
@@ -2743,7 +2927,7 @@ for (const b of document.querySelectorAll('#keys button')) {
     if (active === null) return;
     const k = b.dataset.k;
     // With the input box shown, Enter/newline act on the box when it has content.
-    if (composeShown() && k === 'enter' && (ta.value || atts.length)) { sendCompose(); return; }
+    if (composeShown() && k === 'enter' && (ta.value || atts.length || quotes.length)) { sendCompose(); return; }
     if (composeShown() && k === 'nl' && document.activeElement === ta) { ta.setRangeText('\n', ta.selectionStart, ta.selectionEnd, 'end'); growInput(); return; }
     const appCursor = sessions.get(active).term.modes.applicationCursorKeysMode;
     const arrow = { up: 'A', down: 'B' }[k];
