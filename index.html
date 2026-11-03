@@ -50,7 +50,9 @@
       </div>
     </aside>
     <div id="main-col">
-      <main id="terms"><div id="chat" tabindex="0"><div id="chat-col"></div></div></main>
+      <main id="terms"><div id="chat" tabindex="0"><div id="chat-col"></div></div>
+        <!-- over the chat's scrollbar: where each question and compaction is; hover = preview, click = go -->
+        <div id="chat-rail" hidden></div></main>
       <!-- input box: a normal text field (selection, Ctrl+A, IME, images); sent to the active tab -->
       <form id="compose" autocomplete="off">
         <!-- messages held until the active Claude tab finishes ("끝나면 전송") -->
@@ -70,7 +72,7 @@
             <button type="button" id="attach-btn" class="cicon" title="이미지 첨부 (붙여넣기·끌어다 놓기도 돼요)">＋</button>
             <!-- AI model for Claude tabs: new tabs start with it; an idle Claude tab switches right away -->
             <div class="mpick">
-              <button type="button" id="model-btn" title="AI 모델 · 생각 수준"><span id="model-name"></span><span id="model-eff"></span><span class="caret">⌃</span></button>
+              <button type="button" id="model-btn" title="AI 모델 · 생각 수준"><span id="model-name"></span><span id="model-eff"></span><svg class="caret" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5 6 7.5 9 4.5"/></svg></button>
               <div id="model-menu" hidden>
                 <div class="mm-h">모델</div>
                 <div id="mm-models"></div>
@@ -82,8 +84,22 @@
             <span id="chat-share" hidden></span>
             <span id="opt-hint"></span>
             <span class="cgap"></span>
-            <!-- how full this conversation's context is -->
-            <span id="chat-ctx" hidden></span>
+            <!-- how full this conversation's context is; click = details and "summarize now" (/compact) -->
+            <div class="mpick" id="ctx-pick" hidden>
+              <button type="button" id="chat-ctx"></button>
+              <div id="ctx-menu" hidden>
+                <div class="mm-h">컨텍스트</div>
+                <div id="ctx-info"></div>
+                <div class="ctx-note">가득 차면 Claude가 알아서 요약해요. 지금 요약하면 대화 내용을 줄여 자리를 비워요.</div>
+                <button type="button" id="compact-btn" class="cpill">지금 요약하기</button>
+                <div id="compact-why" class="ctx-note" hidden></div>
+              </div>
+            </div>
+            <!-- Claude Code's permission mode (Shift+Tab in its terminal), for the active Claude tab -->
+            <div class="mpick" id="mode-pick" hidden>
+              <button type="button" id="mode-btn" title="권한 모드 (Shift+Tab)"><span id="mode-ico" class="mico"></span><span id="mode-name"></span><svg class="caret" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5 6 7.5 9 4.5"/></svg></button>
+              <div id="mode-menu" hidden></div>
+            </div>
             <button type="button" id="queue-btn" class="cpill ghost" title="끝나면 전송 (Ctrl+Enter) · 작업이 끝나면 보내요" hidden>끝나면 전송</button>
             <button type="button" id="now-btn" class="cpill" title="바로 전송 (Enter) · 작업 중인 Claude 에 끼워 넣어요" hidden>바로 전송</button>
             <!-- icons are inline SVG, not text glyphs: → and ■ sit off-center and change size per font -->
@@ -140,6 +156,7 @@
       <button type="button" class="theme-opt" data-theme="light"><span class="tprev"></span>라이트</button>
     </div>
     <div class="set-row"><label class="sw"><input type="checkbox" id="chat-usage"><span></span></label><label for="chat-usage">이 대화의 사용량 표시<span class="hint">입력창의 전송 버튼 왼쪽에 컨텍스트가 얼마나 찼는지, 세션·주간 사용량 중 이 대화가 쓴 몫(어림값)을 보여 줘요.</span></label></div>
+    <div class="set-row" id="menu-ko-row" hidden><label class="sw"><input type="checkbox" id="menu-translate"><span></span></label><label for="menu-translate">메뉴를 Claude로 번역<span class="hint">Claude Code가 영어로 띄우는 메뉴 중 자주 쓰는 건 바로 한국어로 바뀌어요. 이걸 켜면 나머지도 Claude(Haiku)가 번역해요. 처음 보는 메뉴는 몇 초 뒤에 바뀌고, 이 PC의 Claude 사용량을 조금 써요. 한 번 번역한 메뉴는 저장돼서 다음부터 바로 보여요.</span></label></div>
     <!-- hosted page (phones) only: install as an app, and on iPhone move the pairing into it -->
     <div id="install-set" hidden>
       <h2 class="sub">앱으로 설치</h2>
@@ -236,6 +253,19 @@
   <script src="vendor/addon-fit.js"></script>
   <script src="vendor/nostr.bundle.js"></script>
   <script src="p2p.js"></script>
-  <script src="app.js"></script>
+  <!-- The web client, in order: classic scripts sharing one global scope (no modules, no bundler).
+       Code that runs while a file loads may only use what earlier files define. -->
+  <script src="js/app.js"></script>
+  <script src="js/sidebar.js"></script>
+  <script src="js/sessions.js"></script>
+  <script src="js/settings.js"></script>
+  <script src="js/connect.js"></script>
+  <script src="js/compose.js"></script>
+  <script src="js/compose-bar.js"></script>
+  <script src="js/status.js"></script>
+  <script src="js/chat.js"></script>
+  <script src="js/chat-live.js"></script>
+  <script src="js/skills.js"></script>
+  <script src="js/main.js"></script>
 </body>
 </html>
