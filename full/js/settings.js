@@ -285,6 +285,41 @@ function onPairing(m) {
   pairTimer = setInterval(tick, 1000);
 }
 
+// ---- relay (TURN) key: settings › remote, desktop window only ----
+let turnOn = false;   // a key is set (remote status `turn`)
+let turnAsked = '';   // 'save' | 'clear' while waiting for turn_done
+function turnState() {
+  $('#turn-state').textContent = turnAsked === 'save' ? '키를 확인하는 중…'
+    : turnOn ? '✅ 켜짐: 바로 연결되지 않는 기기는 릴레이를 거쳐요.'
+    : '꺼짐: 같은 Wi-Fi가 아니면(LTE·5G 등) 연결이 안 될 수 있어요.';
+  $('#turn-clear').hidden = !turnOn;
+  $('#turn-save').textContent = turnOn ? '키 바꾸기' : '저장';
+  $('#turn-save').disabled = !!turnAsked;
+}
+$('#turn-form').onsubmit = (e) => {
+  e.preventDefault();
+  const id = $('#turn-id').value.trim();
+  const token = $('#turn-token').value.trim();
+  if (!id || !token) { toast('TURN 키 ID와 API 토큰을 둘 다 넣어 주세요'); return; }
+  turnAsked = 'save';
+  turnState();
+  send({ t: 'turn', id, token });
+};
+$('#turn-clear').onclick = () => {
+  if (!confirm('릴레이 키를 지울까요? 이 PC에 바로 닿지 못하는 기기는 연결되지 않아요.')) return;
+  turnAsked = 'clear';
+  send({ t: 'turn', id: '', token: '' });
+};
+function onTurnDone(m) {
+  const was = turnAsked;
+  turnAsked = '';
+  turnState();
+  if (m.error) { toast(m.error, 6000); return; }
+  $('#turn-id').value = '';
+  $('#turn-token').value = '';
+  toast(was === 'clear' ? '릴레이 키를 지웠어요' : '릴레이를 켰어요. 폰이 다음에 연결할 때부터 써요', 5000);
+}
+
 function onFrame(buf) {
   const dv = new DataView(buf);
   const id = dv.getUint32(0, true);

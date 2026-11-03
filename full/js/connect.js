@@ -63,6 +63,7 @@ function connect() {
     // An older desktop app without the chat stream: stay on the terminal.
     else if (m.t === 'file') onFile(m);
     else if (m.t === 'webui') window.ZDBOOT?.onWebui(m);
+    else if (m.t === 'turn_done') onTurnDone(m);
     else if (m.t === 'error' && /variant `webui`/.test(m.msg)) {} // an older desktop app: keep this screen
     // An older desktop app doesn't know these messages (the rejection lists every message it
     // does know, so match the unknown one's own name).

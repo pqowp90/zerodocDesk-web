@@ -113,6 +113,8 @@ function onRemote(m) {
     return row;
   }));
   $('#peers').textContent = m.peers ? `지금 P2P로 연결된 기기: ${m.peers}대` : '';
+  turnOn = !!m.turn;
+  turnState();
   if (localDesk) {
     $('#conn').className = m.peers ? 'dot on' : 'dot idle';
     $('#remote-btn').title = m.peers ? `리모트 · 지금 연결된 기기 ${m.peers}대` : '리모트 · 지금 연결된 기기 없음';

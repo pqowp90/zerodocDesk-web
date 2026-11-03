@@ -675,9 +675,10 @@ body.chat-on #compose-text { font-size: 15px; padding: 4px 8px; }
 .sk-note button, .sk-link { border: 0; background: none; color: var(--accent); cursor: pointer; font: inherit;
   font-size: 11px; padding: 0; }
 .sk-sub { margin: 16px 0 6px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; }
-#sk-q, #sk-repo { width: 100%; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--line);
+#sk-q, #sk-repo, #turn-form input { width: 100%; padding: 7px 10px; border-radius: 6px; border: 1px solid var(--line);
   background: var(--bg); color: var(--text); font: inherit; outline: none; }
-#sk-q:focus, #sk-repo:focus { border-color: var(--focus); }
+#sk-q:focus, #sk-repo:focus, #turn-form input:focus { border-color: var(--focus); }
+#turn-form { display: grid; gap: 6px; max-width: 420px; margin-top: 6px; }
 #sk-results { margin-top: 4px; }
 #sk-cats { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0 4px; }
 #sk-cats button { border: 1px solid var(--line); background: transparent; color: var(--dim); border-radius: 999px;

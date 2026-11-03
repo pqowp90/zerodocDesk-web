@@ -189,7 +189,7 @@
 
   <section id="remote" class="pane" hidden>
     <h2>어디서나 접속 (P2P)</h2>
-    <p class="hint">폰·다른 PC로 QR을 찍으면 짝이 맺어져요. 이후엔 어느 네트워크에서든 <b id="web-url"></b> 을 열면 이 PC에 바로 연결돼요. 데이터는 서버를 거치지 않고 기기끼리 직접 오가요.</p>
+    <p class="hint">폰·다른 PC로 QR을 찍으면 짝이 맺어져요. 이후엔 어느 네트워크에서든 <b id="web-url"></b> 을 열면 이 PC에 바로 연결돼요. 데이터는 기기끼리 암호화된 채로 오가요(바로 닿지 못할 때만 아래 릴레이를 거쳐요).</p>
     <button id="pair-btn" class="act">새 기기 연결 QR</button>
     <div id="pair-box" hidden>
       <div id="pair-qr"></div>
@@ -197,6 +197,18 @@
     </div>
     <div id="paired"></div>
     <p class="hint" id="peers"></p>
+
+    <h2 class="sub">릴레이 (TURN)</h2>
+    <p class="hint">폰이 LTE·5G에 있으면 통신사 네트워크 때문에 이 PC에 바로 닿지 못할 때가 많아요. 그럴 때만 Cloudflare 릴레이를 거쳐 연결해요. 내용은 기기끼리 암호화된 채로 지나가서 릴레이도 볼 수 없어요. Cloudflare 대시보드 › Realtime › TURN에서 만든 키를 넣어 주세요. 키는 이 PC에만 저장돼요.</p>
+    <p class="hint" id="turn-state"></p>
+    <form id="turn-form" autocomplete="off">
+      <input id="turn-id" placeholder="TURN 키 ID" spellcheck="false">
+      <input id="turn-token" type="password" placeholder="API 토큰" spellcheck="false">
+      <div class="set-row">
+        <button class="act" type="submit" id="turn-save">저장</button>
+        <button class="act ghost" type="button" id="turn-clear" hidden>지우기</button>
+      </div>
+    </form>
 
     <h2 class="sub">같은 Wi-Fi (LAN)</h2>
     <label class="switch"><input type="checkbox" id="remote-on"> 같은 네트워크에서 주소로 접속 허용</label>

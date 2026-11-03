@@ -77,6 +77,28 @@
     return m.type === 'paired';
   }
 
+  /**
+   * The desktop's relay (TURN) servers, for when this device can't reach it directly (carrier NAT).
+   * Short-lived credentials the desktop mints; kept here for a while so most connects skip the
+   * round trip. A desktop without a relay, or an older one that doesn't answer, means direct only.
+   */
+  async function iceServers(desk, relays) {
+    const key = `zd-ice-${desk}`;
+    try {
+      const c = JSON.parse(load(key) || 'null');
+      if (c && Date.now() < c.until) return c.servers;
+    } catch {}
+    let servers = [];
+    let keep = 10 * 60 * 1000; // "none" (or no answer): ask again in a while
+    try {
+      const m = await signal(desk, relays, { type: 'ice' }, (m) => m.type === 'ice_servers', 6000);
+      if (Array.isArray(m.servers)) servers = m.servers;
+      if (servers.length) keep = 12 * 3600 * 1000; // the desktop's credentials last 24 h
+    } catch {}
+    store(key, JSON.stringify({ until: Date.now() + keep, servers }));
+    return servers;
+  }
+
   function waitGathering(pc, ms) {
     if (pc.iceGatheringState === 'complete') return Promise.resolve();
     return new Promise((res) => {
@@ -112,7 +134,10 @@
     sock.close = () => fin('closed');
 
     (async () => {
-      pc = new RTCPeerConnection({ iceServers: [{ urls: STUN }] });
+      status('연결 준비 중… (릴레이 확인)');
+      const relay = await iceServers(desk, relays);
+      if (closed) return;
+      pc = new RTCPeerConnection({ iceServers: [{ urls: STUN }, ...relay] });
       dc = pc.createDataChannel('zd', { ordered: true });
       dc.binaryType = 'arraybuffer';
       dc.onopen = () => { sock.readyState = 1; sock.onopen && sock.onopen(); };
@@ -133,7 +158,9 @@
       let theirs = '';
       pc.oniceconnectionstatechange = () => status(`직접 연결 시도 중… (ICE: ${pc.iceConnectionState})\n이 기기: ${mine}\n데스크탑: ${theirs}`);
       pc.onconnectionstatechange = () => {
-        if (pc.connectionState === 'failed') fin(`직접 연결에 실패했어요 (이 기기: ${mine} / 데스크탑: ${theirs})`);
+        if (pc.connectionState !== 'failed') return;
+        const hint = relay.length ? '' : '\n\n데스크탑 앱의 설정 › 리모트에서 릴레이(TURN)를 켜면 LTE·5G에서도 연결돼요.';
+        fin(`연결에 실패했어요 (이 기기: ${mine} / 데스크탑: ${theirs})${hint}`);
       };
       status('연결 준비 중… (내 주소 수집)');
       await pc.setLocalDescription(await pc.createOffer());
