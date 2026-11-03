@@ -212,6 +212,7 @@ function activate(id) {
   });
   renderTabs();
   syncChat(true);
+  renderAgents();
   updateSend();
   if (projects.length) renderProjects(); // highlight the conversation now shown
 }
@@ -730,7 +731,16 @@ let upd = null;
 let requiredShown = false;
 let installTotal = 0; // longest countdown seen, so the bar can fill toward the install
 
+/** 'wait' | 'resume' from prefs; null = an older desktop app without the setting */
+let updMode = null;
 function updAction(action) { send({ t: 'update', action }); }
+for (const r of document.querySelectorAll('input[name="upd-mode"]')) {
+  r.onchange = () => {
+    updMode = r.value;
+    send({ t: 'update_mode', mode: r.value });
+    if (upd) onUpdate(upd);
+  };
+}
 $('#upd-dev').onchange = (e) => updAction(e.target.checked ? 'channel_dev' : 'channel_stable');
 
 function onUpdate(m) {
@@ -743,7 +753,7 @@ function onUpdate(m) {
   b.className = 'act' + (m.required ? ' required' : '') + (m.state === 'downloading' || counting ? ' busy' : '');
   const working = [...sessions.values()].filter((s) => s.info.busy || s.info.asking).length;
   b.textContent = counting ? `${m.install_in}초 뒤 업데이트`
-    : m.when_idle ? (working ? '작업 끝나면 업데이트' : '곧 업데이트')
+    : m.when_idle ? (working && !m.resume ? '작업 끝나면 업데이트' : '곧 업데이트')
     : m.state === 'downloading' ? `업데이트 받는 중 ${m.progress}%`
     : m.state === 'ready' ? (m.on_exit ? '끌 때 업데이트' : '업데이트 준비됨')
     : m.required ? '필수 업데이트' : '새 업데이트';
@@ -768,12 +778,15 @@ function renderUpdate() {
   $('#upd-bar > div').style.width = counting
     ? `${Math.round(((installTotal - m.install_in) / installTotal) * 100)}%` : `${m.progress}%`;
 
-  const workingNote = working ? `지금 작업 중인 대화 ${working}개.` : '작업 중인 대화가 없어요.';
+  const resume = updMode === 'resume';
+  const workingNote = resume ? '업데이트하면 다시 켜질 때 열린 탭을 그대로 열어요.'
+    : working ? `지금 작업 중인 대화 ${working}개.` : '작업 중인 대화가 없어요.';
   const state = counting
     ? `대화가 모두 끝났어요. ${m.install_in}초 뒤 설치하고 다시 시작해요.`
     : m.when_idle
     ? (m.state === 'downloading' ? `받는 중 ${m.progress}% · ` : '')
-      + (working ? `작업 중인 대화 ${working}개가 끝나면 자동으로 설치하고 다시 시작해요.` : '곧 설치하고 다시 시작해요…')
+      + (m.resume ? '받는 대로 설치하고 다시 시작해요. 열린 탭은 다시 열려요.'
+        : working ? `작업 중인 대화 ${working}개가 끝나면 자동으로 설치하고 다시 시작해요.` : '곧 설치하고 다시 시작해요…')
     : {
       checking: '확인하는 중…',
       downloading: `받는 중 ${m.progress}% (검증까지 끝나면 설치할 수 있어요)`,
@@ -800,16 +813,22 @@ function renderUpdate() {
   if (m.when_idle) {
     acts.push(btn('예약 취소', 'act ghost', () => updAction('cancel_when_idle')));
   } else if (m.available) {
-    // Main choice: wait for the running conversations, then install by itself. With nothing
+    // Main choice. Resume mode: install as soon as it's downloaded, the tabs open again after.
+    // Otherwise wait for the running conversations, then install by itself; with nothing
     // working that is right away (download, then a few seconds of idle).
-    acts.push(working
+    acts.push(resume
+      ? btn('지금 업데이트', 'act', () => {
+        if (working && !confirm(`작업 중인 대화 ${working}개의 응답이 끊겨요. 탭은 다시 열리니 이어서 말해 주세요. 지금 업데이트할까요?`)) return;
+        updAction('install_when_idle');
+      })
+      : working
       ? btn(`작업 ${working}개 끝나면 업데이트`, 'act', () => updAction('install_when_idle'))
       : btn('지금 업데이트', 'act', () => {
         if (tabs && !confirm(`열린 탭 ${tabs}개가 닫혀요(대화는 사이드바에서 다시 열 수 있어요). 지금 업데이트할까요?`)) return;
         updAction('install_when_idle');
       }));
     if (m.state === 'ready') {
-      if (working) acts.push(btn('지금 바로 설치', 'act ghost', () => {
+      if (working && !resume) acts.push(btn('지금 바로 설치', 'act ghost', () => {
         if (!confirm(`작업 중인 대화 ${working}개가 중단돼요. 지금 업데이트할까요?`)) return;
         updAction('install_now');
       }));
@@ -864,6 +883,13 @@ if (!isDesktop || p2pMode) document.querySelector('.set-nav [data-pane="notify"]
 function onPrefs(m) {
   $('#notify-os').checked = !!m.notify_os;
   if (Array.isArray(m.top_bar)) { topBar = m.top_bar; applyTopBar(); renderBarSet(); }
+  if (m.update_mode) {
+    updMode = m.update_mode;
+    $('#upd-mode').hidden = false;
+    const r = $(`#upd-mode-${updMode}`);
+    if (r) r.checked = true;
+    if (upd) onUpdate(upd);
+  }
 }
 $('#notify-os').onchange = (e) => send({ t: 'notify', on: e.target.checked });
 $('#notify-test').onclick = () => send({ t: 'notify_test' });
@@ -1048,11 +1074,13 @@ function connect() {
     }
     else if (m.t === 'chat') onChat(m);
     else if (m.t === 'skills') onSkills(m);
+    else if (m.t === 'complete') onComplete(m);
     else if (m.t === 'skill_done') onSkillDone(m);
     // An older desktop app without the chat stream: stay on the terminal.
     else if (m.t === 'file') onFile(m);
     // An older desktop app doesn't know these messages (the rejection lists every message it
     // does know, so match the unknown one's own name).
+    else if (m.t === 'error' && /variant `complete`/.test(m.msg)) { acOff = true; acClose(); }
     else if (m.t === 'error' && /variant `watch`/.test(m.msg)) { chatUnsupported = true; syncChat(true); }
     else if (m.t === 'error' && /variant `(conv_rename|conv_delete|proj_move)`/.test(m.msg)) { toast('데스크탑 앱을 업데이트하면 쓸 수 있어요'); send({ t: 'projects' }); }
     else if (m.t === 'error' && /variant `(file|reveal)`/.test(m.msg)) {
@@ -1284,6 +1312,7 @@ function focusInput() {
 
 /** Keeps each tab's unsent text when switching tabs. */
 function swapDraft(id) {
+  acClose();
   if (draftOf !== null) drafts.set(draftOf, ta.value);
   draftOf = id;
   ta.value = drafts.get(id) || '';
@@ -1387,6 +1416,7 @@ function onUploaded(m) {
  *  [Image #n]), then the text (multi-line as one bracketed paste), then Enter. */
 async function sendCompose() {
   if (active === null) return;
+  acClose();
   const s = sessions.get(active);
   const text = composeText();
   if (atts.some((a) => !a.path)) { sendWhenUploaded = true; toast('이미지를 다 올리면 보낼게요', 2000); return; }
@@ -1448,9 +1478,99 @@ function passKey(e) {
   return null;
 }
 
+// ---- completions, like Claude Code's prompt ----
+// `/` at the start lists slash commands, `@` lists files and folders in the tab's folder. The
+// desktop builds the list (complete.rs); this only shows it and puts the pick in the box.
+const acList = $('#ac-list');
+/** @type {null | {word:string, items:{insert:string, label:string, desc:string, kind:string}[], sel:number}} */
+let ac = null;
+let acRid = 0;
+let acTimer = 0;
+let acOff = false; // an older desktop app without completions
+function acRequest() {
+  clearTimeout(acTimer);
+  const before = ta.value.slice(0, ta.selectionStart);
+  // Ask only while a `/…` or `@…` word is at the cursor.
+  if (acOff || active === null || !composeShown() || ta.selectionStart !== ta.selectionEnd
+    || !/(^\s*\/\S*|(^|\s)@\S*)$/.test(before)) { acClose(); return; }
+  // A new rid right away: an answer still on the way is for older text and is dropped.
+  const id = active;
+  const rid = String(++acRid);
+  acTimer = setTimeout(() => send({ t: 'complete', rid, id, before }), 50);
+}
+function acClose() {
+  clearTimeout(acTimer);
+  acRid++; // answers still on the way are dropped
+  ac = null;
+  acList.hidden = true;
+  acList.replaceChildren();
+}
+function onComplete(m) {
+  if (m.rid !== String(acRid)) return;
+  if (m.error || !m.items?.length) { acClose(); return; }
+  ac = { word: m.word, items: m.items, sel: 0 };
+  acRender();
+}
+function acRender() {
+  acList.replaceChildren(...ac.items.map((it, i) => {
+    const row = el('div', 'ac-i' + (i === ac.sel ? ' sel' : ''));
+    row.append(el('span', 'ac-l ' + it.kind, it.label));
+    if (it.kind === 'skill') row.append(el('span', 'ac-k', '스킬'));
+    if (it.desc) row.append(el('span', 'ac-d', it.desc));
+    row.title = it.desc ? `${it.label}\n${it.desc}` : it.label;
+    row.onmousemove = () => { if (ac && ac.sel !== i) { ac.sel = i; acRender(); } };
+    row.onclick = () => acAccept(i, false);
+    return row;
+  }));
+  acList.hidden = false;
+  acList.children[ac.sel]?.scrollIntoView({ block: 'nearest' });
+}
+/** Puts item `i` in place of the word at the cursor; `run` sends it right away (Enter on a command). */
+function acAccept(i, run) {
+  const it = ac?.items[i];
+  const pos = ta.selectionStart;
+  const start = pos - (ac?.word.length ?? 0);
+  if (!it || ta.value.slice(start, pos) !== ac.word) { acClose(); return; }
+  ta.value = ta.value.slice(0, start) + it.insert + ta.value.slice(pos);
+  ta.setSelectionRange(start + it.insert.length, start + it.insert.length);
+  acClose();
+  if (run) { ta.value = ta.value.trimEnd(); growInput(); sendCompose(); return; }
+  growInput();
+  ta.focus();
+  acRequest(); // a folder: what is inside it next
+}
+/** Keys the open list takes: ↑↓ move, Tab/Enter pick, Esc closes. */
+function acKey(e) {
+  if (!ac || e.ctrlKey || e.altKey || e.metaKey) return false;
+  // The list is for text typed before (its update is on the way): the key does what it usually does.
+  if (!ta.value.slice(0, ta.selectionStart).endsWith(ac.word)) { acClose(); return false; }
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    const n = ac.items.length;
+    ac.sel = (ac.sel + (e.key === 'ArrowDown' ? 1 : n - 1)) % n;
+    acRender();
+  } else if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+    const kind = ac.items[ac.sel].kind;
+    acAccept(ac.sel, e.key === 'Enter' && !touch && (kind === 'command' || kind === 'skill'));
+  } else if (e.key === 'Escape') acClose();
+  else return false;
+  e.preventDefault();
+  return true;
+}
+acList.addEventListener('mousedown', (e) => e.preventDefault()); // keep the box focused
+ta.addEventListener('input', acRequest);
+ta.addEventListener('click', acRequest);
+ta.addEventListener('keyup', (e) => { if (/^(ArrowLeft|ArrowRight|Home|End)$/.test(e.key)) acRequest(); });
+ta.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== ta) acClose(); }, 0));
+
 ta.addEventListener('keydown', (e) => {
   if (e.isComposing || e.keyCode === 229) return; // IME is composing (Korean etc.)
   if (active === null) return;
+  if (acKey(e)) return;
+  // Tab in an empty box takes Claude Code's suggested next message, like its own prompt.
+  if (e.key === 'Tab' && !e.shiftKey && !e.ctrlKey && !e.altKey && !ta.value && !atts.length && !quotes.length && takeSuggest()) {
+    e.preventDefault();
+    return;
+  }
   // Backspace at the very start of the box takes off the last quote chip, whole.
   if (e.key === 'Backspace' && quotes.length && ta.selectionStart === 0 && ta.selectionEnd === 0) {
     e.preventDefault();
@@ -1501,7 +1621,35 @@ function updateSend() {
   $('#now-btn').hidden = !busy || !has;
   $('#queue-btn').hidden = !busy || !has;
   renderQueue();
+  renderSuggest(has);
 }
+
+// ---- suggested next message ----
+// After a reply Claude Code puts a suggestion in its empty input box in dim text (Tab takes it).
+// The desktop reads it off the screen (`suggest`); here it shows in the empty box the same way,
+// and Tab (or tapping the chip on a phone) puts it in the box to edit or send.
+function curSuggest() {
+  const s = active !== null && sessions.get(active);
+  return s && s.info.claude && !s.info.busy && !s.info.menu ? s.info.suggest || '' : '';
+}
+function renderSuggest(has) {
+  const sug = curSuggest();
+  ta.placeholder = sug ? (touch ? sug : `${sug}   ⇥ Tab`) : '메시지 입력';
+  ta.classList.toggle('suggest', !!sug);
+  const chip = $('#suggest-chip');
+  chip.hidden = !touch || !sug || has;
+  chip.textContent = sug;
+}
+function takeSuggest() {
+  const sug = curSuggest();
+  if (!sug) return false;
+  ta.value = sug;
+  ta.setSelectionRange(sug.length, sug.length);
+  growInput();
+  ta.focus();
+  return true;
+}
+$('#suggest-chip').onclick = takeSuggest;
 function renderQueue() {
   const list = (active !== null && queued.get(active)) || [];
   const s = active !== null && sessions.get(active);
@@ -1527,6 +1675,7 @@ function renderQueue() {
 function holdCompose() {
   const s = active !== null && sessions.get(active);
   if (!s) return;
+  acClose();
   const text = composeText();
   if (!text.trim() && !atts.length) return;
   const wait = s.info.claude && s.info.alive && (s.info.busy || s.info.asking || notReady(s)
@@ -1969,11 +2118,38 @@ function onChat(m) {
   if (!s) return;
   if (m.conv && m.conv !== s.conv) { s.conv = m.conv; adoptDrafts(); } // null: not found yet, keep the last
   if (m.reset || !s.chat) s.chat = [];
+  s.note = m.note || null; // an older desktop app sends none
   s.chat.push(...m.items);
   confirmPending(s);
   const ctxKey = JSON.stringify(m.ctx ?? null);
   if (ctxKey !== JSON.stringify(s.ctx ?? null)) { s.ctx = m.ctx ?? null; if (m.id === active) renderUsage(); }
   if (m.id === active && chatShown()) renderChat(m.reset);
+  const agentKey = JSON.stringify(m.agents || []); // an older desktop app sends none
+  if (agentKey !== JSON.stringify(s.agents || [])) { s.agents = m.agents || []; if (m.id === active) renderAgents(); }
+}
+
+/** The active conversation's working subagents over the input box: type, task, latest call. */
+function renderAgents() {
+  const list = (active !== null && sessions.get(active)?.agents) || [];
+  const box = $('#agent-list');
+  box.hidden = !list.length;
+  if (!list.length) { box.replaceChildren(); return; }
+  box.classList.toggle('open', load('zd-agents-open') === '1');
+  const head = el('button', 'ah');
+  head.type = 'button';
+  head.title = '눌러서 펼치기 / 접기';
+  head.innerHTML = '<span class="spin"></span><span></span><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4-4 4 4"/></svg>';
+  head.children[1].textContent = `서브 에이전트 ${list.length}개 작업 중`;
+  head.onclick = () => store('zd-agents-open', box.classList.toggle('open') ? '1' : undefined);
+  const body = el('div', 'ab');
+  body.append(...list.map((a) => {
+    const row = el('div', 'ai-row');
+    const act = a.tool ? `${a.tool}${a.detail ? ' · ' + a.detail : ''}` : '';
+    row.title = [a.kind, a.description, act].filter(Boolean).join('\n');
+    row.append(el('b', '', a.kind || '서브 에이전트'), el('span', 'ad', a.description), el('span', 'aa', act));
+    return row;
+  }));
+  box.replaceChildren(head, body);
 }
 
 const escHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -2334,6 +2510,9 @@ function chatItemEl(it) {
 const SPIN_FRAMES = ['·', '✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳', '✢'];
 const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)');
 const chatWorking = el('div', 'chat-working');
+// What Claude said before the command it is running, until the transcript has it (server's `note`).
+const chatNote = el('div', 'msg ai note');
+let noteKey = null;
 const wTool = el('div', 'wtool');
 const wGlyph = el('span', 'wglyph', '✻');
 const wVerb = el('span', 'wverb');
@@ -2449,6 +2628,7 @@ function renderChat(force) {
     rebuilt = true;
   }
   chatWorking.remove();
+  chatNote.remove();
   chatMenu.remove();
   chatPend.remove();
   chatCol.querySelector('.chat-empty')?.remove();
@@ -2472,6 +2652,10 @@ function renderChat(force) {
   const menuNew = updateChatMenu(s);
   if (s.info.menu) chatCol.append(chatMenu);
   else if (s.info.busy) chatCol.append(chatWorking);
+  if (s.note) {
+    if (s.note !== noteKey) { noteKey = s.note; chatNote.innerHTML = md(s.note); }
+    chatCol.insertBefore(chatNote, chatCol.querySelector(':scope > .chat-menu, :scope > .chat-working'));
+  }
   const pendNew = renderChatPending(pend, s.info.busy);
   if (pend.length) chatCol.append(chatPend);
   if (force || atBottom || menuNew || pendNew) chat.scrollTop = chat.scrollHeight;
@@ -2790,11 +2974,17 @@ function skCount(n) {
   return String(n);
 }
 
-function skRow(name, market, desc, installs = 0) {
+function skRow(name, market, desc, installs = 0, author = '') {
   const row = el('div', 'sk-row');
   const main = el('div', 'sk-main');
   const title = el('div', 'sk-name', name);
   title.append(el('span', 'sk-mk', market));
+  if (author) {
+    const a = el('button', 'sk-mk sk-author', `@${author}`);
+    a.title = `${author}의 스킬만 보기`;
+    a.onclick = () => { $('#sk-q').value = `@${author}`; skRequest(); };
+    title.append(a);
+  }
   if (installs > 0) {
     const n = el('span', 'sk-mk', `↓ ${skCount(installs)}`);
     n.title = `${installs.toLocaleString()}명이 설치`;
@@ -2866,9 +3056,9 @@ function renderSkills() {
 
   const res = $('#sk-results');
   const q = $('#sk-q').value.trim();
-  $('#sk-q').placeholder = `이름·설명으로 검색 (${m.total.toLocaleString()}개)`;
+  $('#sk-q').placeholder = `이름·설명·만든 사람으로 검색 (${m.total.toLocaleString()}개)`;
   const rows = m.results.map((r) => {
-    const { row } = skRow(r.name, r.market, r.description, r.installs);
+    const { row } = skRow(r.name, r.market, r.description, r.installs, r.author);
     if (skBusy === r.id) row.classList.add('busy');
     const b = el('button', 'act', skBusy === r.id ? '설치 중…' : local ? '이 프로젝트에 추가' : '추가');
     b.onclick = () => skApply('on', r.id);

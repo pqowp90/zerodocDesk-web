@@ -54,8 +54,14 @@
       <!-- input box: a normal text field (selection, Ctrl+A, IME, images); sent to the active tab -->
       <form id="compose" autocomplete="off">
         <!-- messages held until the active Claude tab finishes ("끝나면 전송") -->
+        <!-- the active conversation's subagents that are working now, and what each is doing -->
+        <div id="agent-list" hidden></div>
         <div id="queue-list"></div>
         <div class="cbox">
+          <!-- completions while typing a /command or an @file, like Claude Code's prompt -->
+          <div id="ac-list" hidden></div>
+          <!-- phone: Claude Code's suggested next message, tap to put it in the box (desktop: Tab) -->
+          <button type="button" id="suggest-chip" hidden></button>
           <div id="quote-list"></div>
           <div id="attach-list"></div>
           <textarea id="compose-text" rows="1" spellcheck="false"
@@ -191,7 +197,7 @@
     <div id="sk-market"></div>
     <div id="sk-list"><div class="side-empty">불러오는 중…</div></div>
     <h3 class="sk-sub">스킬 찾기</h3>
-    <input id="sk-q" type="search" placeholder="이름·설명으로 검색" autocomplete="off" spellcheck="false">
+    <input id="sk-q" type="search" placeholder="이름·설명·만든 사람으로 검색" autocomplete="off" spellcheck="false">
     <div id="sk-cats"></div>
     <div id="sk-results"></div>
     <details id="sk-more">
@@ -213,6 +219,11 @@
     <p class="hint" id="upd-error" hidden></p>
     <div id="upd-ch-row"><label class="sw"><input type="checkbox" id="upd-dev"><span></span></label><label for="upd-dev">개발 버전도 받기<span class="hint">새 기능을 먼저 받아 테스트해요. 불안정할 수 있어요.</span></label></div>
     <div id="upd-actions"></div>
+    <div id="upd-mode" hidden>
+      <h3>업데이트할 때</h3>
+      <div class="set-row"><input type="radio" name="upd-mode" id="upd-mode-wait" value="wait"><label for="upd-mode-wait">작업이 끝나면 다시 시작<span class="hint">작업 중인 대화가 모두 끝날 때까지 기다렸다가 설치해요. 열린 탭은 닫히고, 대화는 사이드바에서 다시 열 수 있어요.</span></label></div>
+      <div class="set-row"><input type="radio" name="upd-mode" id="upd-mode-resume" value="resume"><label for="upd-mode-resume">바로 다시 시작하고 탭 이어 열기<span class="hint">받는 대로 설치하고, 다시 켜지면 열려 있던 탭을 그대로 열어요. Claude 탭은 하던 대화를 이어 가요. 작업 중이던 응답은 끊기니 다시 열린 뒤 이어서 말해 주세요.</span></label></div>
+    </div>
   </section>
 
     </div>
