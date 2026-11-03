@@ -3,21 +3,41 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
-  <title>zerodocDesk</title>
+  <title>DeskDoc</title>
+  <!-- installable app (PWA) on phones; app.js keeps theme-color in step with the theme -->
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="theme-color" content="#1e2026">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="DeskDoc">
   <link rel="stylesheet" href="vendor/xterm.css">
   <link rel="stylesheet" href="style.css">
+  <!-- theme before the first paint (no dark flash in light mode); app.js changes it later -->
+  <script>try { document.documentElement.dataset.theme = localStorage.getItem('zd-theme') === 'light' ? 'light' : 'dark'; } catch {}</script>
 </head>
 <body>
+  <!-- items with data-bar: order and visibility come from this PC's settings (topbar.rs);
+       the rest (remote button, chat/terminal switch) stay fixed at the right end -->
   <header id="bar">
-    <button id="side-toggle" class="icon" title="프로젝트 목록 (Ctrl+B)">☰</button>
-    <div id="tabs"></div>
-    <button id="new-claude" class="act" title="새 Claude 탭 (Ctrl+Shift+T)">+ Claude</button>
-    <button id="new-shell" class="act ghost" title="새 셸 탭">+ 셸</button>
-    <span id="conn" class="dot off" title="연결 상태"></span>
-    <button id="remote-btn" class="act ghost" title="리모트 접속">리모트</button>
+    <button id="side-toggle" data-bar="side_toggle" class="icon" title="프로젝트 목록 (Ctrl+B)">☰</button>
+    <div id="tabs" data-bar="tabs"></div>
+    <button id="new-claude" data-bar="new_claude" class="act" title="새 Claude 탭 (Ctrl+Shift+T)">+ Claude</button>
+    <button id="new-shell" data-bar="new_shell" class="act ghost" title="새 셸 탭">+ 셸</button>
+    <!-- fixed. Desktop window: opens settings › remote, the dot is green while another device is connected.
+         Other devices (no remote settings there): just the dot, green while connected to the desktop. -->
+    <button id="remote-btn" type="button" class="act ghost" title="연결 상태"><span id="conn" class="dot off"></span><span class="rlabel">리모트</span></button>
+    <!-- a Claude tab is either the conversation (with the input box) or the raw terminal -->
+    <div id="mode" title="대화 / 커맨드 전환 (Ctrl+Shift+Y)">
+      <button type="button" data-mode="chat">대화</button>
+      <button type="button" data-mode="term">커맨드</button>
+    </div>
   </header>
 
   <div id="workspace">
+    <!-- desktop window only: floats at the top-right corner, under the window buttons -->
+    <button id="update-btn" type="button" class="act" hidden>업데이트</button>
     <aside id="side">
       <div class="side-head">
         <span>프로젝트</span>
@@ -25,9 +45,59 @@
         <button id="refresh-projects" class="icon" title="새로고침">⟳</button>
       </div>
       <div id="projects"><div class="side-empty">불러오는 중…</div></div>
+      <div class="side-foot">
+        <button id="settings-btn" type="button" title="설정 · 스킬, 리모트, 업데이트"><span class="gear">⚙</span>설정</button>
+      </div>
     </aside>
-    <main id="terms"></main>
+    <div id="main-col">
+      <main id="terms"><div id="chat" tabindex="0"><div id="chat-col"></div></div></main>
+      <!-- input box: a normal text field (selection, Ctrl+A, IME, images); sent to the active tab -->
+      <form id="compose" autocomplete="off">
+        <!-- messages held until the active Claude tab finishes ("끝나면 전송") -->
+        <div id="queue-list"></div>
+        <div class="cbox">
+          <div id="attach-list"></div>
+          <textarea id="compose-text" rows="1" spellcheck="false"
+            placeholder="메시지 입력"></textarea>
+          <div class="cbar">
+            <button type="button" id="attach-btn" class="cicon" title="이미지 첨부 (붙여넣기·끌어다 놓기도 돼요)">＋</button>
+            <!-- AI model for Claude tabs: new tabs start with it; an idle Claude tab switches right away -->
+            <div class="mpick">
+              <button type="button" id="model-btn" title="AI 모델 · 생각 수준"><span id="model-name"></span><span id="model-eff"></span><span class="caret">⌃</span></button>
+              <div id="model-menu" hidden>
+                <div class="mm-h">모델</div>
+                <div id="mm-models"></div>
+                <div class="mm-h">생각 수준</div>
+                <div id="mm-efforts"></div>
+              </div>
+            </div>
+            <!-- this conversation's share of the session / weekly limits -->
+            <span id="chat-share" hidden></span>
+            <span id="opt-hint"></span>
+            <span class="cgap"></span>
+            <!-- how full this conversation's context is -->
+            <span id="chat-ctx" hidden></span>
+            <button type="button" id="queue-btn" class="cpill ghost" title="끝나면 전송 (Ctrl+Enter) · 작업이 끝나면 보내요" hidden>끝나면 전송</button>
+            <button type="button" id="now-btn" class="cpill" title="바로 전송 (Enter) · 작업 중인 Claude 에 끼워 넣어요" hidden>바로 전송</button>
+            <!-- icons are inline SVG, not text glyphs: → and ■ sit off-center and change size per font -->
+            <button type="button" id="stop-btn" class="cround stop" title="정지 (Esc)" aria-label="정지" hidden><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="2.5" fill="currentColor"/></svg></button>
+            <button type="submit" id="send-btn" class="cround" title="전송 (Enter)" aria-label="전송"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12.5 5.5 19 12l-6.5 6.5"/></svg></button>
+          </div>
+        </div>
+        <input type="file" id="attach-file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>
+      </form>
+    </div>
   </div>
+
+  <!-- status bar across the bottom of the window. Left: the active tab's state (working / waiting on a
+       menu / idle, and since when), then its Claude account (click = switch). Right: Claude plan usage (5-hour session / week) like /usage; click = check now.
+       The active conversation's own numbers sit in the input box (#chat-share, #chat-ctx). -->
+  <footer id="status">
+    <span id="tab-state" hidden></span>
+    <button type="button" id="account" hidden></button>
+    <span class="cgap"></span>
+    <button type="button" id="usage" hidden></button>
+  </footer>
 
   <!-- touch devices only: keys a phone keyboard doesn't have -->
   <nav id="keys">
@@ -41,7 +111,57 @@
     <button data-k="enter">Enter</button>
   </nav>
 
-  <section id="remote" hidden>
+  <!-- settings: one dialog, a pane per topic -->
+  <div id="settings" hidden>
+   <div class="set-box" role="dialog" aria-label="설정">
+    <nav class="set-nav">
+      <h2>설정</h2>
+      <button type="button" data-pane="display">화면</button>
+      <button type="button" data-pane="notify">알림</button>
+      <button type="button" data-pane="skills">스킬</button>
+      <button type="button" data-pane="remote">리모트</button>
+      <button type="button" data-pane="update">업데이트</button>
+    </nav>
+    <button id="settings-close" class="icon" type="button" title="닫기 (Esc)">×</button>
+    <div class="set-body">
+
+  <section id="display" class="pane" hidden>
+    <h2>화면</h2>
+    <p class="hint">테마는 기기마다 따로 정해요. 데스크탑 창은 맨 위 제목 표시줄 색도 같이 바뀌어요.</p>
+    <div class="theme-pick">
+      <button type="button" class="theme-opt" data-theme="dark"><span class="tprev"></span>다크</button>
+      <button type="button" class="theme-opt" data-theme="light"><span class="tprev"></span>라이트</button>
+    </div>
+    <div class="set-row"><label class="sw"><input type="checkbox" id="chat-usage"><span></span></label><label for="chat-usage">이 대화의 사용량 표시<span class="hint">입력창의 전송 버튼 왼쪽에 컨텍스트가 얼마나 찼는지, 세션·주간 사용량 중 이 대화가 쓴 몫(어림값)을 보여 줘요.</span></label></div>
+    <!-- hosted page (phones) only: install as an app, and on iPhone move the pairing into it -->
+    <div id="install-set" hidden>
+      <h2 class="sub">앱으로 설치</h2>
+      <p class="hint" id="install-hint"></p>
+      <div class="set-row">
+        <button id="install-btn" class="act" type="button" hidden>앱으로 설치</button>
+        <button id="move-btn" class="act ghost" type="button" hidden>홈 화면 앱으로 연결 옮기기</button>
+      </div>
+    </div>
+    <div id="bar-set">
+      <h2 class="sub">상단 바</h2>
+      <p class="hint">맨 위 바에 둘 항목과 순서를 골라요. 이 PC의 설정이라 폰·다른 기기 화면도 같이 바뀌어요. ☰를 숨겨도 Ctrl+B로 프로젝트 목록을 열 수 있어요.</p>
+      <div id="bar-items"></div>
+      <div class="set-row"><button id="bar-reset" class="act ghost" type="button">기본값으로</button></div>
+      <h2 class="sub">내 버튼</h2>
+      <p class="hint">버튼 폴더에 스크립트(.ps1 .cmd .bat .py .js)를 넣으면 상단 바에 그 버튼이 생겨요. 누르면 이 PC에서 실행되고, 지금 보던 탭에 입력하거나 새 탭을 열 수도 있어요. 쓰는 법은 폴더 안 README.txt에 있어요.</p>
+      <button id="buttons-folder" class="act ghost" type="button">버튼 폴더 열기</button>
+    </div>
+  </section>
+
+  <section id="notify" class="pane" hidden>
+    <h2>알림</h2>
+    <p class="hint">Claude 작업이 끝나면 앱 안에 알림이 떠요. 다른 창을 보고 있을 때도 알 수 있게 윈도우 알림을 같이 띄울 수 있어요.</p>
+    <div class="set-row"><label class="sw"><input type="checkbox" id="notify-os"><span></span></label><label for="notify-os">윈도우 알림도 띄우기<span class="hint">이 창을 보고 있지 않을 때 Claude가 작업을 끝내거나 선택을 기다리면 윈도우 알림으로 알려 줘요. 알림을 누르면 그 탭으로 가요.</span></label></div>
+    <div class="set-row"><button id="notify-test" class="act ghost" type="button">알림 시험해 보기</button></div>
+    <p class="hint">알림이 안 보이면 Windows 설정 › 시스템 › 알림에서 DeskDoc 알림과 방해 금지가 꺼져 있는지 확인해 주세요.</p>
+  </section>
+
+  <section id="remote" class="pane" hidden>
     <h2>어디서나 접속 (P2P)</h2>
     <p class="hint">폰·다른 PC로 QR을 찍으면 짝이 맺어져요. 이후엔 어느 네트워크에서든 <b id="web-url"></b> 을 열면 이 PC에 바로 연결돼요. 데이터는 서버를 거치지 않고 기기끼리 직접 오가요.</p>
     <button id="pair-btn" class="act">새 기기 연결 QR</button>
@@ -56,8 +176,47 @@
     <label class="switch"><input type="checkbox" id="remote-on"> 같은 네트워크에서 주소로 접속 허용</label>
     <div id="remote-urls"></div>
     <p class="hint">주소에 든 토큰이 비밀번호 역할을 하니 남에게 보여 주지 마세요.</p>
-    <button id="remote-close" class="act ghost">닫기</button>
   </section>
+
+  <!-- skills = Claude Code plugins; account (user scope) or one project (local scope, just me) -->
+  <section id="skills" class="pane" hidden>
+    <h2>스킬</h2>
+    <div class="sk-scope">
+      <button type="button" data-scope="user">계정 공통</button>
+      <button type="button" data-scope="local">프로젝트</button>
+      <select id="sk-proj" title="프로젝트 폴더"></select>
+    </div>
+    <p class="hint" id="sk-hint"></p>
+    <div id="sk-market"></div>
+    <div id="sk-list"><div class="side-empty">불러오는 중…</div></div>
+    <h3 class="sk-sub">스킬 찾기</h3>
+    <input id="sk-q" type="search" placeholder="이름·설명으로 검색" autocomplete="off" spellcheck="false">
+    <div id="sk-cats"></div>
+    <div id="sk-results"></div>
+    <details id="sk-more">
+      <summary>다른 스킬 저장소 추가</summary>
+      <form id="sk-add" autocomplete="off">
+        <input id="sk-repo" placeholder="GitHub owner/repo" spellcheck="false">
+        <button class="act" type="submit">추가</button>
+      </form>
+    </details>
+    <p class="hint">바뀐 설정은 새로 여는 Claude 대화부터 적용돼요.</p>
+  </section>
+
+  <section id="update" class="pane" hidden>
+    <h2 id="upd-title">업데이트</h2>
+    <p id="upd-ver"></p>
+    <ul id="upd-notes"></ul>
+    <div id="upd-bar" hidden><div></div></div>
+    <p class="hint" id="upd-state"></p>
+    <p class="hint" id="upd-error" hidden></p>
+    <div id="upd-ch-row"><label class="sw"><input type="checkbox" id="upd-dev"><span></span></label><label for="upd-dev">개발 버전도 받기<span class="hint">새 기능을 먼저 받아 테스트해요. 불안정할 수 있어요.</span></label></div>
+    <div id="upd-actions"></div>
+  </section>
+
+    </div>
+   </div>
+  </div>
 
   <div id="toast" hidden></div>
 

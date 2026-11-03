@@ -1,4 +1,4 @@
-// zerodocDesk P2P transport: Nostr carries the handshake, WebRTC carries the session.
+// DeskDoc P2P transport: Nostr carries the handshake, WebRTC carries the session.
 // Exposes window.ZDP2P = { pair, connect } — `connect` returns a WebSocket-like object so the
 // rest of the client doesn't care which transport it is on.
 'use strict';
@@ -108,6 +108,7 @@
       sock.onclose && sock.onclose({ reason: reason || '' });
     };
     sock.send = (s) => { if (dc && dc.readyState === 'open') dc.send(s); };
+    Object.defineProperty(sock, 'bufferedAmount', { get: () => (dc ? dc.bufferedAmount : 0) });
     sock.close = () => fin('closed');
 
     (async () => {
