@@ -23,10 +23,20 @@ return s;
 },
 forget(pub) { saveDesks(desks().filter((d) => d.pub !== pub)); },
 onWebui: null,
+push: true,
+openTab: null,
+onOpen: null,
 };
 window.ZDBOOT = boot;
 addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); boot.installPrompt = e; });
-if ('serviceWorker' in navigator && isSecureContext) navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator && isSecureContext) {
+navigator.serviceWorker.register('sw.js').catch(() => {});
+navigator.serviceWorker.addEventListener('message', (e) => {
+const m = e.data;
+if (m && m.t === 'zd-open' && typeof m.desk === 'string') openFrom(m.desk, Number.isInteger(m.tab) ? m.tab : null);
+});
+navigator.serviceWorker.startMessages();
+}
 function desks() {
 let list = [];
 try { list = JSON.parse(load('zd-desks') || '[]'); } catch {}
@@ -152,6 +162,22 @@ document.body.append(s);
 });
 }
 }
+function openFrom(pub, tab) {
+const d = desks().find((x) => x.pub === pub);
+if (!d) return;
+if (boot.desk && boot.desk.pub === pub && boot.onOpen) {
+if (tab !== null) boot.onOpen(tab);
+return;
+}
+if (boot.hash) {
+const q = new URLSearchParams({ open: pub });
+if (tab !== null) q.set('tab', String(tab));
+location.replace(`${location.pathname}?${q}`);
+return;
+}
+boot.openTab = tab;
+go(d);
+}
 let attempt = 0;
 function go(d) {
 const gen = ++attempt;
@@ -245,6 +271,17 @@ const err = await pairWith(h);
 if (!err) return go(desks()[0]);
 const list = desks();
 return list.length ? pick(list, err) : unpaired(err);
+}
+const q = new URLSearchParams(location.search);
+const open = q.get('open');
+if (open) {
+history.replaceState(null, '', location.pathname);
+const d = desks().find((x) => x.pub === open);
+const tab = Number(q.get('tab'));
+if (d) {
+boot.openTab = q.has('tab') && Number.isInteger(tab) ? tab : null;
+return go(d);
+}
 }
 const list = desks();
 if (!list.length) return unpaired('');
