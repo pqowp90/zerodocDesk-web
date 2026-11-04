@@ -138,7 +138,8 @@ body.side-hidden #side { display: none; }
 .proj-head .caret { width: 12px; color: var(--dim); font-size: 10px; flex: none; }
 .proj-head .pname { flex: 1; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .proj-head .icon { padding: 1px 6px; font-size: 13px; visibility: hidden; }
-.proj-head:hover .icon, .proj.open .proj-head .new { visibility: visible; }
+.proj.open .proj-head .new { visibility: visible; }
+@media (hover: hover) { .proj-head:hover .icon { visibility: visible; } }
 .proj-list { display: none; padding-left: 14px; }
 .proj.open .proj-list { display: block; }
 .sess { display: flex; gap: 6px; align-items: baseline; padding: 4px 8px; border-radius: 6px; cursor: pointer;
@@ -156,7 +157,10 @@ body.side-hidden #side { display: none; }
   50% { content: '✽'; } 60% { content: '✻'; } 70% { content: '✶'; } 80% { content: '✳'; } 90% { content: '✢'; }
 }
 .sess .icon { padding: 0 4px; visibility: hidden; }
-.sess:hover .icon { visibility: visible; }
+/* Hover reveals only where there is a mouse: on iOS a tap that changes what :hover shows is taken as
+   hover alone, and the click needs a second tap. Touch screens show these icons all the time instead. */
+@media (hover: hover) { .sess:hover .icon { visibility: visible; } }
+@media (hover: none) { .sess .icon { visibility: visible; } }
 .run-badge { min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; flex: none; font-size: 10px;
   line-height: 16px; text-align: center; color: #fff; background: var(--ok); }
 .run-badge.done { background: var(--busy); }
@@ -173,8 +177,12 @@ body.side-hidden #side { display: none; }
 .sess-more { padding: 4px 8px; color: var(--accent); cursor: pointer; font-size: 12px; }
 /* "⋯" replaces the right slot (time / working glyph / blue dot) on hover or while its menu is open */
 .sess .more { display: none; visibility: visible; padding: 0 5px; margin: -2px -4px -2px 0; font-size: 14px; line-height: 18px; }
-.sess:hover .more, .sess.menu-open .more { display: inline-block; }
-.sess:hover :is(.when, .sglyph, .done-dot, .bg-ring), .sess.menu-open :is(.when, .sglyph, .done-dot, .bg-ring) { display: none; }
+.sess.menu-open .more { display: inline-block; }
+.sess.menu-open :is(.when, .sglyph, .done-dot, .bg-ring) { display: none; }
+@media (hover: hover) {
+  .sess:hover .more { display: inline-block; }
+  .sess:hover :is(.when, .sglyph, .done-dot, .bg-ring) { display: none; }
+}
 .sess.menu-open { background: var(--hover); color: var(--text); }
 .sess.removing { opacity: .4; pointer-events: none; }
 .sess.editing { background: var(--hover); }
@@ -217,12 +225,6 @@ body.side-hidden #side { display: none; }
   color: var(--text); font: inherit; font-size: 16px; /* under 16px iOS zooms in on focus */ outline: none; }
 .paste-pair input:focus { border-color: var(--focus); }
 .paste-pair .act { padding: 9px 12px; }
-
-#keys { display: none; gap: 4px; padding: 6px; background: var(--panel); border-top: 1px solid var(--line);
-  overflow-x: auto; flex: none; }
-#keys button { flex: 1 0 auto; min-width: 44px; padding: 9px 8px; border: 1px solid var(--line);
-  border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
-@media (pointer: coarse) { #keys { display: flex; } }
 
 
 #compose { flex: none; margin: 0; padding: 6px 8px 8px; background: var(--panel); border-top: 1px solid var(--line); }

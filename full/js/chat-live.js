@@ -292,9 +292,10 @@ function updateChatRail() {
   }));
 }
 
+// Tip on hover only with a mouse: on iOS a mouseover that shows something eats the tap, so the jump would need two.
 chatRail.addEventListener('mouseover', (e) => {
   const b = e.target.closest('.rail-m');
-  if (!b) return;
+  if (!b || !matchMedia('(hover: hover)').matches) return;
   chatRailTip.textContent = b._mark.text;
   chatRailTip.classList.toggle('c', b._mark.kind === 'c');
   chatRailTip.hidden = false;
