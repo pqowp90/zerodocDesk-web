@@ -1,39 +1,37 @@
 <!doctype html>
 <html lang="ko">
 <head>
-  <meta charset="utf-8">
-  <!-- The hosted page (desk.zerodoc.kr): pairing and the connection only. The screen comes from the
-       desktop it connects to (loader.js), run from blob: URLs; nothing inline, nothing from elsewhere. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' wss:; object-src 'none'; base-uri 'none'; form-action 'none'">
-  <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
-  <title>DeskDoc</title>
-  <link rel="manifest" href="manifest.webmanifest">
-  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
-  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
-  <meta name="theme-color" content="#1e2026">
-  <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="DeskDoc">
-  <link rel="stylesheet" href="loader.css" id="loader-css">
-  <script src="js/theme.js"></script>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' wss:; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
+<title>DeskDoc</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="theme-color" content="#1e2026">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="DeskDoc">
+<link rel="stylesheet" href="loader.css" id="loader-css">
+<script src="js/theme.js"></script>
 </head>
 <body>
-  <main id="boot">
-    <img class="logo" src="icons/icon-192.png" alt="">
-    <h1>DeskDoc</h1>
-    <p id="msg">불러오는 중…</p>
-    <div id="pick" hidden></div>
-    <form id="paste" hidden>
-      <input type="url" placeholder="https://… 링크 붙여넣기" autocomplete="off">
-      <button type="submit">연결</button>
-    </form>
-    <div id="acts" hidden>
-      <button type="button" id="retry">다시 시도</button>
-      <button type="button" id="other" hidden>다른 PC</button>
-    </div>
-  </main>
-  <script src="vendor/nostr.bundle.js"></script>
-  <script src="p2p.js"></script>
-  <script src="loader.js"></script>
+<main id="boot">
+<img class="logo" src="icons/icon-192.png" alt="">
+<h1>DeskDoc</h1>
+<p id="msg">불러오는 중…</p>
+<div id="pick" hidden></div>
+<form id="paste" hidden>
+<input type="url" placeholder="https://… 링크 붙여넣기" autocomplete="off">
+<button type="submit">연결</button>
+</form>
+<div id="acts" hidden>
+<button type="button" id="retry">다시 시도</button>
+<button type="button" id="other" hidden>다른 PC</button>
+</div>
+</main>
+<script src="vendor/nostr.bundle.js"></script>
+<script src="p2p.js"></script>
+<script src="loader.js"></script>
 </body>
 </html>
