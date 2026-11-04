@@ -26,13 +26,15 @@ function onUpdate(m) {
   const b = $('#update-btn');
   b.hidden = !m.available;
   b.className = 'act' + (m.required ? ' required' : '') + (m.state === 'downloading' || counting ? ' busy' : '');
-  const working = [...sessions.values()].filter((s) => s.info.busy || s.info.asking).length;
-  b.textContent = counting ? `${m.install_in}초 뒤 업데이트`
-    : m.when_idle ? (working && !m.resume ? '작업 끝나면 업데이트' : '곧 업데이트')
-    : m.state === 'downloading' ? `업데이트 받는 중 ${m.progress}%`
-    : m.state === 'ready' ? (m.on_exit ? '끌 때 업데이트' : '업데이트 준비됨')
-    : m.required ? '필수 업데이트' : '새 업데이트';
-  b.title = m.required ? '이 버전은 지원이 끝났어요. 업데이트해 주세요.' : `v${m.latest} · 새 버전 정보 보기`;
+  // What a scheduled install waits for (as the server's `holds_update`): turns in progress unless
+  // it resumes them, and background commands always (a restart loses them).
+  const held = [...sessions.values()].filter((s) => s.info.background || (!m.resume && (s.info.busy || s.info.asking))).length;
+  b.textContent = counting ? txt('settings.update.btn.counting', { n: m.install_in })
+    : m.when_idle ? (held ? txt('settings.update.btn.when_idle_held') : txt('settings.update.btn.when_idle'))
+    : m.state === 'downloading' ? txt('settings.update.btn.downloading', { p: m.progress })
+    : m.state === 'ready' ? (m.on_exit ? txt('settings.update.btn.on_exit') : txt('settings.update.btn.ready'))
+    : m.required ? txt('settings.update.required') : txt('settings.update.btn.new');
+  b.title = m.required ? txt('settings.update.btn.required_tip') : txt('settings.update.btn.new_tip', { v: m.latest });
   // A required update opens the panel once by itself.
   if (m.required && m.available && !requiredShown) { requiredShown = true; openSettings('update'); }
   renderUpdate();
@@ -42,11 +44,11 @@ function renderUpdate() {
   const m = upd;
   if (!m || !paneOpen('update')) return;
   const tabs = [...sessions.values()].filter((s) => s.info.alive).length;
-  const working = [...sessions.values()].filter((s) => s.info.busy || s.info.asking).length;
-  $('#upd-title').textContent = m.required && m.available ? '필수 업데이트' : m.available ? '새 버전이 있어요' : '업데이트';
+  const working = [...sessions.values()].filter((s) => s.info.busy || s.info.asking || s.info.background).length;
+  $('#upd-title').textContent = m.required && m.available ? txt('settings.update.required') : m.available ? txt('settings.update.title.available') : txt('settings.update.title');
   $('#upd-ver').textContent = m.available
     ? `v${m.current} → v${m.latest}${m.pub_date ? ` · ${m.pub_date.slice(0, 10)}` : ''}`
-    : `v${m.current}${m.latest && m.state !== 'error' ? ' · 최신 버전이에요' : ''}`;
+    : `v${m.current}${m.latest && m.state !== 'error' ? txt('settings.update.latest_suffix') : ''}`;
   $('#upd-notes').replaceChildren(...(m.available ? m.notes : []).map((n) => el('li', '', n)));
   const counting = m.install_in != null;
   $('#upd-bar').hidden = m.state !== 'downloading' && !counting;
@@ -54,22 +56,22 @@ function renderUpdate() {
     ? `${Math.round(((installTotal - m.install_in) / installTotal) * 100)}%` : `${m.progress}%`;
 
   const resume = updMode === 'resume';
-  const workingNote = resume ? '업데이트하면 다시 켜질 때 열린 탭을 그대로 열어요.'
-    : working ? `지금 작업 중인 대화 ${working}개.` : '작업 중인 대화가 없어요.';
+  const workingNote = resume ? txt('settings.update.note.resume')
+    : working ? txt('settings.update.note.working', { n: working }) : txt('settings.update.note.idle');
   const state = counting
-    ? `대화가 모두 끝났어요. ${m.install_in}초 뒤 설치하고 다시 시작해요.`
+    ? txt('settings.update.state.counting', { n: m.install_in })
     : m.when_idle
-    ? (m.state === 'downloading' ? `받는 중 ${m.progress}% · ` : '')
-      + (m.resume ? '받는 대로 설치하고 다시 시작해요. 열린 탭은 다시 열려요.'
-        : working ? `작업 중인 대화 ${working}개가 끝나면 자동으로 설치하고 다시 시작해요.` : '곧 설치하고 다시 시작해요…')
+    ? (m.state === 'downloading' ? txt('settings.update.state.downloading_prefix', { p: m.progress }) : '')
+      + (m.resume ? txt('settings.update.state.resume_install')
+        : working ? txt('settings.update.state.working_install', { n: working }) : txt('settings.update.state.soon_install'))
     : {
-      checking: '확인하는 중…',
-      downloading: `받는 중 ${m.progress}% (검증까지 끝나면 설치할 수 있어요)`,
-      ready: m.on_exit ? '앱을 끌 때 설치돼요.' : `받아 뒀어요. ${workingNote}`,
-    }[m.state] || (m.available && m.dev ? '개발 빌드라 자동으로 받지 않아요.' : '');
-  const checked = m.checked_at ? `마지막 확인 ${ago(m.checked_at)}${ago(m.checked_at) === '방금' ? '' : ' 전'}` : '';
-  $('#upd-state').textContent = [m.required && m.available ? '이 버전은 지원이 끝났어요.' : '', state, checked].filter(Boolean).join(' · ');
-  if (m.available && m.latest_channel === 'dev') $('#upd-ver').textContent += ' (개발 버전)';
+      checking: txt('settings.update.state.checking'),
+      downloading: txt('settings.update.state.downloading', { p: m.progress }),
+      ready: m.on_exit ? txt('settings.update.state.on_exit') : txt('settings.update.state.ready', { note: workingNote }),
+    }[m.state] || (m.available && m.dev ? txt('settings.update.state.dev') : '');
+  const checked = m.checked_at ? txt(Date.now() / 1000 - m.checked_at < 60 ? 'settings.update.checked_now' : 'settings.update.checked_ago', { t: ago(m.checked_at) }) : '';
+  $('#upd-state').textContent = [m.required && m.available ? txt('settings.update.state.required') : '', state, checked].filter(Boolean).join(' · ');
+  if (m.available && m.latest_channel === 'dev') $('#upd-ver').textContent += txt('settings.update.dev_suffix');
   $('#upd-error').hidden = !m.error;
   $('#upd-error').textContent = m.error || '';
 
@@ -83,35 +85,36 @@ function renderUpdate() {
   const busy = m.state === 'checking' || m.state === 'downloading';
   const acts = [];
   if (m.when_idle) {
-    acts.push(btn('예약 취소', 'act ghost', () => updAction('cancel_when_idle')));
+    acts.push(btn(txt('settings.update.act.cancel_when_idle'), 'act ghost', () => updAction('cancel_when_idle')));
   } else if (m.available) {
     // Main choice. Resume mode: install as soon as it's downloaded, the tabs open again after.
     // Otherwise wait for the running conversations, then install by itself; with nothing
     // working that is right away (download, then a few seconds of idle).
     acts.push(resume
-      ? btn('지금 업데이트', 'act', () => {
-        if (working && !confirm(`작업 중인 대화 ${working}개의 응답이 끊겨요. 탭은 다시 열리니 이어서 말해 주세요. 지금 업데이트할까요?`)) return;
+      ? btn(txt('settings.update.act.now'), 'act', () => {
+        if (working && !confirm(txt('settings.update.confirm.resume', { n: working }))) return;
         updAction('install_when_idle');
       })
       : working
-      ? btn(`작업 ${working}개 끝나면 업데이트`, 'act', () => updAction('install_when_idle'))
-      : btn('지금 업데이트', 'act', () => {
-        if (tabs && !confirm(`열린 탭 ${tabs}개가 닫혀요(대화는 사이드바에서 다시 열 수 있어요). 지금 업데이트할까요?`)) return;
+      ? btn(txt('settings.update.act.after_working', { n: working }), 'act', () => updAction('install_when_idle'))
+      : btn(txt('settings.update.act.now'), 'act', () => {
+        if (tabs && !confirm(txt('settings.update.confirm.tabs', { n: tabs }))) return;
         updAction('install_when_idle');
       }));
     if (m.state === 'ready') {
-      if (working && !resume) acts.push(btn('지금 바로 설치', 'act ghost', () => {
-        if (!confirm(`작업 중인 대화 ${working}개가 중단돼요. 지금 업데이트할까요?`)) return;
+      const cut = resume ? 0 : working;
+      if (cut) acts.push(btn(txt('settings.update.act.install_now'), 'act ghost', () => {
+        if (!confirm(txt('settings.update.confirm.cut', { n: cut }))) return;
         updAction('install_now');
       }));
       acts.push(m.on_exit
-        ? btn('끌 때 설치 취소', 'act ghost', () => updAction('cancel_on_exit'))
-        : btn('앱 끌 때 설치', 'act ghost', () => updAction('install_on_exit')));
+        ? btn(txt('settings.update.act.cancel_on_exit'), 'act ghost', () => updAction('cancel_on_exit'))
+        : btn(txt('settings.update.act.install_on_exit'), 'act ghost', () => updAction('install_on_exit')));
     } else {
-      acts.push(btn('받기', 'act ghost', () => updAction('download'), busy));
+      acts.push(btn(txt('settings.update.act.download'), 'act ghost', () => updAction('download'), busy));
     }
   }
-  acts.push(btn('다시 확인', 'act ghost', () => updAction('check'), busy));
+  acts.push(btn(txt('settings.update.act.check'), 'act ghost', () => updAction('check'), busy));
   $('#upd-actions').replaceChildren(...acts);
 }
 
@@ -141,7 +144,6 @@ function closeSettings() { $('#settings').hidden = true; focusInput(); }
 
 for (const b of document.querySelectorAll('.set-nav [data-pane]')) b.onclick = () => openSettings(b.dataset.pane);
 for (const b of document.querySelectorAll('.theme-opt')) b.onclick = () => setTheme(b.dataset.theme);
-renderThemePane();
 $('#settings-btn').onclick = () => ($('#settings').hidden ? openSettings() : closeSettings());
 $('#settings-close').onclick = closeSettings;
 $('#settings').addEventListener('pointerdown', (e) => { if (e.target === e.currentTarget && !isNavButton(e)) closeSettings(); });
@@ -157,7 +159,12 @@ function onPrefs(m) {
   // This PC's Claude usage: the desktop window only; an older desktop app sends no such pref.
   $('#menu-ko-row').hidden = !isDesktop || p2pMode || m.menu_translate === undefined;
   $('#menu-translate').checked = !!m.menu_translate;
+  // Links open in this PC's browser from the desktop window only (other devices open their own).
+  $('#link-browser-row').hidden = !isDesktop || p2pMode || !m.link_browser;
+  if (m.link_browser) $('#link-browser').value = m.link_browser;
   if (Array.isArray(m.top_bar)) { topBar = m.top_bar; applyTopBar(); renderBarSet(); }
+  themePresets = Array.isArray(m.theme_presets) ? m.theme_presets : [];
+  setThemeViews(m.themes);
   if (m.update_mode) {
     updMode = m.update_mode;
     $('#upd-mode').hidden = false;
@@ -169,6 +176,86 @@ function onPrefs(m) {
 $('#notify-os').onchange = (e) => send({ t: 'notify', on: e.target.checked });
 $('#notify-test').onclick = () => send({ t: 'notify_test' });
 $('#menu-translate').onchange = (e) => send({ t: 'menu_translate', on: e.target.checked });
+$('#link-browser').onchange = (e) => send({ t: 'link_browser', browser: e.target.value });
+
+// ---- theme colors: three per theme, the rest derived on the PC (theme.rs) ----
+/** @type {{id:string, name:string, mode:string, bg:string, fg:string, accent:string}[]} */
+let themePresets = [];
+const THEME_FIELDS = [['bg', 'settings.theme.bg'], ['fg', 'settings.theme.fg'], ['accent', 'settings.theme.accent']];
+const HEX = /^#?([0-9a-f]{6}|[0-9a-f]{3})$/i;
+let themeSendTimer = 0;
+/** Sends one theme's colors (null = its default preset); `soon` waits a moment (dragging in a picker). */
+function sendThemeColors(mode, colors, soon) {
+  clearTimeout(themeSendTimer);
+  const go = () => send({ t: 'theme_colors', mode, colors });
+  if (soon) themeSendTimer = setTimeout(go, 150); else go();
+}
+function themeCard(mode) {
+  const card = document.createElement('div');
+  card.className = 'tcard';
+  card.dataset.mode = mode;
+  card.innerHTML = `<h3>${mode === 'dark' ? txt('settings.theme.dark') : txt('settings.theme.light')}</h3><div class="tbox">
+    <div class="trow"><span class="tname">${txt('settings.theme.preset')}</span>
+      <button type="button" class="icon treset" title="${txt('settings.theme.reset')}">↺</button><select class="tpreset"></select></div>
+    ${THEME_FIELDS.map(([k, id]) => { const name = txt(id); return `<div class="trow"><span class="tname">${name}</span>
+      <label class="tcolor"><input type="color" data-k="${k}" aria-label="${txt('settings.theme.pick', { name })}"><span class="thash">#</span>
+      <input type="text" data-k="${k}" maxlength="7" spellcheck="false" aria-label="${txt('settings.theme.hex', { name })}"></label></div>`; }).join('')}
+  </div>`;
+  const view = () => themeViews?.find((t) => t.mode === mode);
+  /** The card's three colors with `k` changed to `v`. */
+  const withColor = (k, v) => ({ ...view().colors, [k]: v });
+  card.querySelector('.treset').onclick = () => sendThemeColors(mode, null);
+  card.querySelector('.tpreset').onchange = (e) => {
+    const p = themePresets.find((p) => p.id === e.target.value);
+    if (p) sendThemeColors(mode, { bg: p.bg, fg: p.fg, accent: p.accent });
+  };
+  for (const inp of card.querySelectorAll('input[type="color"]')) {
+    const k = inp.dataset.k;
+    inp.oninput = () => {
+      card.querySelector(`input[type="text"][data-k="${k}"]`).value = inp.value.slice(1);
+      sendThemeColors(mode, withColor(k, inp.value), true);
+    };
+    inp.onchange = () => sendThemeColors(mode, withColor(k, inp.value));
+  }
+  for (const inp of card.querySelectorAll('input[type="text"]')) {
+    const k = inp.dataset.k;
+    inp.onchange = () => {
+      const m = HEX.exec(inp.value.trim());
+      if (!m) { renderThemeColors(true); return; } // not a color: back to the saved one
+      const h = m[1].length === 3 ? [...m[1]].map((c) => c + c).join('') : m[1];
+      sendThemeColors(mode, withColor(k, '#' + h.toLowerCase()));
+    };
+    inp.onkeydown = (e) => { if (e.key === 'Enter') inp.blur(); };
+  }
+  return card;
+}
+/** Fills the cards from the PC's themes. `force` also rewrites the field being typed in. */
+function renderThemeColors(force) {
+  const box = $('#theme-cards');
+  $('#color-set').hidden = !isDesktop || p2pMode || !themeViews;
+  if (!themeViews) return;
+  if (!box.children.length) for (const t of themeViews) box.append(themeCard(t.mode));
+  for (const card of box.children) {
+    const t = themeViews.find((t) => t.mode === card.dataset.mode);
+    if (!t) continue;
+    const presets = themePresets.filter((p) => p.mode === t.mode);
+    const sel = card.querySelector('.tpreset');
+    sel.replaceChildren(...presets.map((p) => new Option(p.name, p.id)));
+    if (!t.preset) sel.append(Object.assign(new Option(txt('settings.theme.custom'), ''), { disabled: true }));
+    sel.value = t.preset || '';
+    card.querySelector('.treset').disabled = !presets.length || t.preset === presets[0].id;
+    for (const [k] of THEME_FIELDS) {
+      const c = card.querySelector(`input[type="color"][data-k="${k}"]`);
+      const x = card.querySelector(`input[type="text"][data-k="${k}"]`);
+      // Leave a field alone while it's being edited (its picker is open, or it's being typed in).
+      if (force || document.activeElement !== c) c.value = t.colors[k];
+      if (force || document.activeElement !== x) x.value = t.colors[k].slice(1);
+    }
+  }
+}
+// After THEME_FIELDS and themePresets exist: with themes cached from the last run this already
+// draws the cards, and an error here would stop the rest of this file (the settings button with it).
+renderThemePane();
 
 // ---- top bar: the server keeps its layout (topbar.rs); the page only moves and hides elements ----
 /** @type {null | {id:string, shown:boolean, label:string, required:boolean}[]} null = an older desktop app: keep the bar as is */
@@ -220,7 +307,7 @@ function renderBarSet() {
     row.className = 'bar-row';
     const sw = document.createElement('label');
     sw.className = 'sw';
-    sw.title = s.required ? '숨길 수 없어요' : (s.shown ? '숨기기' : '보이기');
+    sw.title = s.required ? txt('settings.bar.locked') : (s.shown ? txt('settings.bar.hide') : txt('settings.bar.show'));
     const cb = Object.assign(document.createElement('input'), { type: 'checkbox', checked: s.shown, disabled: s.required });
     cb.onchange = () => sendTopBar(topBar.map((o, j) => (j === i ? { ...o, shown: cb.checked } : o)));
     sw.append(cb, document.createElement('span'));
@@ -230,8 +317,8 @@ function renderBarSet() {
       [l[i], l[i + d]] = [l[i + d], l[i]];
       sendTopBar(l);
     };
-    const up = Object.assign(document.createElement('button'), { type: 'button', className: 'icon', textContent: '↑', title: '앞으로', disabled: i === 0 });
-    const down = Object.assign(document.createElement('button'), { type: 'button', className: 'icon', textContent: '↓', title: '뒤로', disabled: i === topBar.length - 1 });
+    const up = Object.assign(document.createElement('button'), { type: 'button', className: 'icon', textContent: '↑', title: txt('settings.bar.up'), disabled: i === 0 });
+    const down = Object.assign(document.createElement('button'), { type: 'button', className: 'icon', textContent: '↓', title: txt('settings.bar.down'), disabled: i === topBar.length - 1 });
     up.onclick = () => move(-1);
     down.onclick = () => move(1);
     row.append(sw, name, up, down);
@@ -249,7 +336,7 @@ $('#bar-set').hidden = !isDesktop || p2pMode;
 const localDesk = isDesktop && !p2pMode;
 if (localDesk) {
   $('#conn').className = 'dot idle';
-  $('#remote-btn').title = '리모트 · 지금 연결된 기기 없음';
+  $('#remote-btn').title = txt('remote.tip.none');
   $('#remote-btn').onclick = () => (paneOpen('remote') ? closeSettings() : openSettings('remote'));
 } else {
   $('#remote-btn').classList.add('just-dot');
@@ -258,7 +345,7 @@ if (localDesk) {
 function showConn(on) {
   if (localDesk) return;
   $('#conn').className = on ? 'dot on' : 'dot off';
-  $('#remote-btn').title = on ? '데스크탑에 연결됨' : '데스크탑 연결 끊김';
+  $('#remote-btn').title = on ? txt('conn.tip.on') : txt('conn.tip.off');
 }
 
 /** A Windows notification for tab `id` was clicked: the window is up, show that tab. */
@@ -278,7 +365,7 @@ function onPairing(m) {
   clearInterval(pairTimer);
   const tick = () => {
     const left = Math.max(0, Math.round((until - Date.now()) / 1000));
-    $('#pair-ttl').textContent = left ? `폰 카메라로 찍으세요 · ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} 동안 유효 · 한 번만 쓸 수 있어요` : 'QR이 만료됐어요';
+    $('#pair-ttl').textContent = left ? txt('settings.pair.ttl', { t: `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` }) : txt('settings.pair.expired');
     if (!left) { clearInterval(pairTimer); $('#pair-box').hidden = true; }
   };
   tick();
@@ -289,24 +376,24 @@ function onPairing(m) {
 let turnOn = false;   // a key is set (remote status `turn`)
 let turnAsked = '';   // 'save' | 'clear' while waiting for turn_done
 function turnState() {
-  $('#turn-state').textContent = turnAsked === 'save' ? '키를 확인하는 중…'
-    : turnOn ? '✅ 켜짐: 바로 연결되지 않는 기기는 릴레이를 거쳐요.'
-    : '꺼짐: 같은 Wi-Fi가 아니면(LTE·5G 등) 연결이 안 될 수 있어요.';
+  $('#turn-state').textContent = turnAsked === 'save' ? txt('settings.turn.checking')
+    : turnOn ? txt('settings.turn.on')
+    : txt('settings.turn.off');
   $('#turn-clear').hidden = !turnOn;
-  $('#turn-save').textContent = turnOn ? '키 바꾸기' : '저장';
+  $('#turn-save').textContent = turnOn ? txt('settings.turn.change') : txt('settings.turn.save');
   $('#turn-save').disabled = !!turnAsked;
 }
 $('#turn-form').onsubmit = (e) => {
   e.preventDefault();
   const id = $('#turn-id').value.trim();
   const token = $('#turn-token').value.trim();
-  if (!id || !token) { toast('TURN 키 ID와 API 토큰을 둘 다 넣어 주세요'); return; }
+  if (!id || !token) { toast(txt('settings.turn.need_both')); return; }
   turnAsked = 'save';
   turnState();
   send({ t: 'turn', id, token });
 };
 $('#turn-clear').onclick = () => {
-  if (!confirm('릴레이 키를 지울까요? 이 PC에 바로 닿지 못하는 기기는 연결되지 않아요.')) return;
+  if (!confirm(txt('settings.turn.confirm_clear'))) return;
   turnAsked = 'clear';
   send({ t: 'turn', id: '', token: '' });
 };
@@ -317,7 +404,7 @@ function onTurnDone(m) {
   if (m.error) { toast(m.error, 6000); return; }
   $('#turn-id').value = '';
   $('#turn-token').value = '';
-  toast(was === 'clear' ? '릴레이 키를 지웠어요' : '릴레이를 켰어요. 폰이 다음에 연결할 때부터 써요', 5000);
+  toast(was === 'clear' ? txt('settings.turn.cleared') : txt('settings.turn.enabled'), 5000);
 }
 
 function onFrame(buf) {

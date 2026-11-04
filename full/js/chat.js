@@ -25,16 +25,16 @@ function renderAgents() {
   box.classList.toggle('open', load('zd-agents-open') === '1');
   const head = el('button', 'ah');
   head.type = 'button';
-  head.title = '눌러서 펼치기 / 접기';
+  head.title = txt('chat.agents.toggle');
   head.innerHTML = '<span class="spin"></span><span></span><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4-4 4 4"/></svg>';
-  head.children[1].textContent = `서브 에이전트 ${list.length}개 작업 중`;
+  head.children[1].textContent = txt('chat.agents.working', { n: list.length });
   head.onclick = () => store('zd-agents-open', box.classList.toggle('open') ? '1' : undefined);
   const body = el('div', 'ab');
   body.append(...list.map((a) => {
     const row = el('div', 'ai-row');
     const act = a.tool ? `${a.tool}${a.detail ? ' · ' + a.detail : ''}` : '';
     row.title = [a.kind, a.description, act].filter(Boolean).join('\n');
-    row.append(el('b', '', a.kind || '서브 에이전트'), el('span', 'ad', a.description), el('span', 'aa', act));
+    row.append(el('b', '', a.kind || txt('chat.agents.kind')), el('span', 'ad', a.description), el('span', 'aa', act));
     return row;
   }));
   box.replaceChildren(head, body);
@@ -68,11 +68,33 @@ function trimTextPath(p) {
   return m ? m[1] : p;
 }
 
+// ---- web links in the chat ----
+// http(s) links, written bare or as [text](url). The desktop window has this PC open them in the
+// browser picked in settings ({t:"open_url"}); other devices open them themselves.
+const TEXT_URL_RE = /(?<![\w\/])https?:\/\/[^\s<>"'`]+/g;
+
+/** A URL found in running text, without what follows it there: "…/a)," / "…/a에서". */
+function trimTextUrl(u) {
+  // A closing bracket belongs to the URL only when it also opens one: (see https://a/b_(c)).
+  while (/[.,;:!?'")\]}>ㄱ-힣]$/.test(u)) {
+    const c = u.slice(-1);
+    const open = { ')': '(', ']': '[', '}': '{' }[c];
+    if (open && u.split(open).length > u.split(c).length - 1) break;
+    u = u.slice(0, -1);
+  }
+  return u;
+}
+
+/** `label` (HTML) as a link to the web address `url`. */
+function urlLink(url, label) {
+  return `<a class="url" href="${escHtml(url)}" target="_blank" rel="noopener" title="${escHtml(url)}">${label}</a>`;
+}
+
 /** `label` (HTML) as a link to `path`, or as is where it couldn't open anything. */
 function pathLink(path, label) {
   const img = IMG_EXT_RE.test(path);
   if (!img && !isDesktop) return label;
-  return `<a class="path${img ? ' img' : ''}" href="#" data-path="${escHtml(path)}" title="${escHtml(path)}\n${img ? '눌러서 보기' : '탐색기에서 열기'}">${label}</a>`;
+  return `<a class="path${img ? ' img' : ''}" href="#" data-path="${escHtml(path)}" title="${escHtml(path)}\n${escHtml(img ? txt('chat.path.view') : txt('chat.path.open'))}">${label}</a>`;
 }
 
 /** Inline markdown on one line of raw text; everything is escaped first. */
@@ -85,15 +107,19 @@ function mdInline(src) {
     const code = `<code>${escHtml(c)}</code>`;
     const p = asPath(c);
     plain[held.length] = code;
-    return hold(p ? pathLink(p, code) : code);
+    return hold(p ? pathLink(p, code) : /^https?:\/\/\S+$/i.test(c) ? urlLink(c, code) : code);
   });
   s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (all, text, href) => {
     const label = escHtml(text).replace(/\u0000(\d+)\u0000/g, (_, i) => plain[i] ?? held[i]);
-    if (/^https?:\/\//.test(href)) return hold(`<a href="${escHtml(href)}" target="_blank" rel="noopener">${label}</a>`);
+    if (/^https?:\/\//i.test(href)) return hold(urlLink(href, label));
     let target = href;
     try { target = decodeURIComponent(href); } catch { /* keep as written */ }
     const p = asPath(target);
     return p ? hold(pathLink(p, label)) : all;
+  });
+  s = s.replace(TEXT_URL_RE, (m) => {
+    const u = trimTextUrl(m);
+    return hold(urlLink(u, escHtml(u))) + m.slice(u.length);
   });
   s = s.replace(TEXT_PATH_RE, (m) => {
     const p = trimTextPath(m);
@@ -202,6 +228,9 @@ function highlight(code, lang) {
   return out + escHtml(code.slice(at));
 }
 
+const COPY_SVG = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 3.5v-.5A1.5 1.5 0 0 0 9 1.5H4A1.5 1.5 0 0 0 2.5 3v5A1.5 1.5 0 0 0 4 9.5h.5"/></svg>';
+const COPIED_SVG = '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3 3 7-7"/></svg>';
+
 /** Small, safe markdown renderer: headings, lists, code, quotes, tables, rules, paragraphs. */
 function md(src) {
   const lines = src.replace(/\r/g, '').split('\n');
@@ -216,7 +245,8 @@ function md(src) {
       const body = [];
       for (i++; i < lines.length && !lines[i].trim().startsWith(m[1]); i++) body.push(lines[i]);
       i++;
-      html += `<pre><code>${highlight(body.join('\n'), m[2])}</code></pre>`;
+      html += `<div class="codebox"><pre><code>${highlight(body.join('\n'), m[2])}</code></pre>`
+        + `<button type="button" class="code-copy" title="${escHtml(txt('chat.code.copy'))}">${COPY_SVG}</button></div>`;
     } else if (!l.trim()) {
       flush(); i++;
     } else if ((m = l.match(/^(#{1,6})\s+(.*)$/))) {
@@ -266,7 +296,7 @@ function fetchFile(tab, src) {
   if (!fileUrls.has(key)) {
     const p = new Promise((resolve, reject) => {
       const rid = Math.random().toString(36).slice(2);
-      const timer = setTimeout(() => { fileReqs.delete(rid); reject(new Error('응답이 없어요')); }, 30000);
+      const timer = setTimeout(() => { fileReqs.delete(rid); reject(new Error(txt('chat.no_reply'))); }, 30000);
       fileReqs.set(rid, { parts: [], resolve, reject, timer });
       send({ t: 'file', rid, id: tab, ...src });
     });
@@ -308,7 +338,7 @@ const thumbSrc = (e) => (e.dataset.img ? { img: e.dataset.img } : { path: e.data
 /** A row of thumbnails for the images `paths` name and the pasted images `imgs`, or null. */
 function imgThumbs(paths, imgs = []) {
   const list = [
-    ...imgs.map((img) => ({ img, title: '붙여 넣은 이미지' })),
+    ...imgs.map((img) => ({ img, title: txt('chat.img.pasted') })),
     ...[...new Set(paths)].filter((p) => IMG_EXT_RE.test(p)).map((path) => ({ path, title: path })),
   ];
   if (!list.length || active === null) return null;
@@ -319,7 +349,7 @@ function imgThumbs(paths, imgs = []) {
     b.dataset.tab = active;
     if (s.img) b.dataset.img = s.img; else b.dataset.path = s.path;
     b.title = s.title;
-    b.append(el('span', 'cimg-note', '불러오는 중…'));
+    b.append(el('span', 'cimg-note', txt('chat.loading')));
     box.append(b);
     thumbObs.observe(b);
   }
@@ -336,18 +366,18 @@ addEventListener('keydown', (e) => { if (e.key === 'Escape' && !viewer.hidden) {
 /** `src`: { path } or { img }, as for fetchFile. */
 function openViewer(tab, src) {
   const path = src.path;
-  const label = path || '붙여 넣은 이미지';
+  const label = path || txt('chat.img.pasted');
   const img = el('img');
   img.alt = label;
   const bar = el('div', 'vbar');
   bar.append(el('span', 'vpath', label));
   if (isDesktop && path) {
-    const b = el('button', 'act ghost', '탐색기에서 보기');
+    const b = el('button', 'act ghost', txt('chat.img.reveal'));
     b.type = 'button';
     b.onclick = () => send({ t: 'reveal', id: tab, path });
     bar.append(b);
   }
-  const x = el('button', 'act ghost', '닫기 (Esc)');
+  const x = el('button', 'act ghost', txt('chat.close_esc'));
   x.type = 'button';
   x.onclick = closeViewer;
   bar.append(x);
@@ -357,6 +387,22 @@ function openViewer(tab, src) {
 }
 
 chat.addEventListener('click', (e) => {
+  const cp = e.target.closest('.code-copy');
+  if (cp) {
+    copyText(cp.parentElement.querySelector('pre').textContent);
+    cp.innerHTML = COPIED_SVG;
+    cp.classList.add('done');
+    clearTimeout(cp._t);
+    cp._t = setTimeout(() => { cp.innerHTML = COPY_SVG; cp.classList.remove('done'); }, 1500);
+    return;
+  }
+  const web = e.target.closest('a.url');
+  if (web) {
+    if (!isDesktop || p2pMode) return; // this device's own browser
+    e.preventDefault();
+    send({ t: 'open_url', url: web.getAttribute('href') });
+    return;
+  }
   const a = e.target.closest('a.path, .cimg');
   if (!a || active === null) return;
   e.preventDefault();
@@ -374,11 +420,11 @@ function userBubble(text) {
   if (!longText(text)) return el('div', 'msg user', text);
   const d = el('div', 'msg user long');
   const lines = text.split('\n').length;
-  const more = el('button', 'msg-more', `전체 보기 (${lines}줄)`);
+  const more = el('button', 'msg-more', txt('chat.diff.more', { n: lines }));
   more.type = 'button';
   more.onclick = () => {
     const open = d.classList.toggle('open');
-    more.textContent = open ? '접기' : `전체 보기 (${lines}줄)`;
+    more.textContent = open ? txt('chat.diff.less') : txt('chat.diff.more', { n: lines });
     // Folding a bubble whose top has scrolled away: bring it back rather than land past it.
     const gap = d.getBoundingClientRect().top - chat.getBoundingClientRect().top;
     if (!open && gap < 0) chat.scrollTop += gap - 12;
@@ -392,7 +438,7 @@ function userBubble(text) {
 function chatItemEl(it) {
   if (it.k === 'user') {
     const d = userBubble(it.text);
-    d.dataset.q = it.text || (it.images?.length ? `🖼 이미지 ${it.images.length}장` : '');
+    d.dataset.q = it.text || (it.images?.length ? txt('chat.img.count', { n: it.images.length }) : '');
     const thumbs = imgThumbs((it.text.match(TEXT_PATH_RE) || []).map(trimTextPath), it.images || []);
     if (!thumbs) return d;
     // Only images: they go in the bubble rather than under an empty one.
@@ -410,12 +456,127 @@ function chatItemEl(it) {
   }
   if (it.k === 'compact') {
     const d = el('div', 'chat-compact');
-    d.append(el('span', '', it.auto ? '컨텍스트가 차서 여기서 자동으로 요약했어요' : '여기서 대화를 요약했어요'));
-    d.title = '이 위의 내용은 이제 Claude에게 요약본으로만 남아 있어요';
+    d.append(el('span', '', it.auto ? txt('chat.summary.auto') : txt('chat.summary.manual')));
+    d.title = txt('chat.summary.note');
     return d;
   }
+  if (it.k === 'diff') return diffEl(it);
   const d = el('div', 'tool');
   d.append(el('span', 'tname', it.name), el('span', 'tdet', it.detail || ''));
-  d.title = `${it.name} ${it.detail || ''}`;
+  if (it.id) d.dataset.call = it.id;
+  d.title = `${it.name} ${it.path || it.detail || ''}`;
+  return d;
+}
+
+/** Turns the dot of call `call` red: it failed ({k:"failed"}, which comes after the call). */
+function markFailed(call) {
+  const rows = chatCol.querySelectorAll('.tool[data-call]');
+  for (let i = rows.length - 1; i >= 0; i--) {
+    if (rows[i].dataset.call !== call) continue;
+    rows[i].classList.add('fail');
+    rows[i].title += `\n${txt('chat.tool.failed')}`;
+    return;
+  }
+}
+
+// ---- file changes (Edit/Write) ----
+// The lines a change touched, numbered and colored the way the CLI shows them. The server sends
+// them ready ({k:"diff"}, history::FileDiff); this only draws them.
+
+/** Lines shown before a change folds behind "전체 보기". */
+const DIFF_FOLD = 14;
+
+/** "+2 −1" (and "새 파일"), for the tool line the change belongs to. */
+function diffCounts(it) {
+  const c = el('span', 'dcount');
+  if (it.created) c.append(el('span', 'dnew', txt('chat.diff.created')));
+  if (it.added) c.append(el('span', 'dadd', `+${it.added}`));
+  if (it.removed) c.append(el('span', 'ddel', `−${it.removed}`));
+  return c;
+}
+
+/** The file and counts, for a change whose call line isn't above it (it began a new update). */
+function diffHead(it) {
+  const h = el('div', 'tool');
+  h.append(el('span', 'tdet', it.path), diffCounts(it));
+  return h;
+}
+
+/** Makes `row` (the call's line) open and close the change `d` under it. */
+function linkDiff(row, d) {
+  d.row = row;
+  row.classList.add('dtoggle');
+  row.tabIndex = 0;
+  row.setAttribute('role', 'button');
+  row.prepend(el('span', 'dchev'));
+  const flip = () => {
+    // Opened or closed by hand: stays that way, whatever foldDiffs would do.
+    d.dataset.manual = d.classList.contains('shut') ? 'open' : 'shut';
+    setDiffOpen(d, d.dataset.manual === 'open');
+    updateChatHead();
+    queueChatRail();
+  };
+  row.onclick = flip;
+  row.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } };
+}
+
+function setDiffOpen(d, open) {
+  d.classList.toggle('shut', !open);
+  d.row?.classList.toggle('open', open);
+  d.row?.setAttribute('aria-expanded', open);
+}
+
+/** While Claude works, only its latest change of this turn stays open; once it's done, all close.
+ *  Changes opened or closed by hand keep their state. */
+function foldDiffs(busy) {
+  const diffs = chatCol.querySelectorAll('.diff');
+  const q = [...chatCol.querySelectorAll('.msg.user')].pop();
+  const d = diffs[diffs.length - 1];
+  const latest = busy && d && (!q || q.compareDocumentPosition(d) & Node.DOCUMENT_POSITION_FOLLOWING) ? d : null;
+  for (const x of diffs) setDiffOpen(x, x.dataset.manual ? x.dataset.manual === 'open' : x === latest);
+}
+
+function diffEl(it) {
+  const d = el('div', 'diff shut');
+  const lang = (it.path.match(/\.([\w+#-]+)$/) || [])[1] || '';
+  const rows = [];
+  let width = 1;
+  for (const h of it.hunks) {
+    let o = h.old_start, n = h.new_start;
+    if (rows.length) rows.push(null); // a gap between hunks
+    for (const l of h.lines) {
+      const mark = l[0];
+      const no = mark === '-' ? o++ : mark === '+' ? n++ : mark === ' ' ? (o++, n++) : '';
+      width = Math.max(width, String(no).length);
+      rows.push([no, mark, l.slice(1)]);
+    }
+  }
+  const body = el('div', 'dbody');
+  body.style.setProperty('--dno', `${width}ch`);
+  for (const r of rows) {
+    if (!r) { body.append(el('div', 'dgap', '⋮')); continue; }
+    const [no, mark, text] = r;
+    const row = el('div', `dl${mark === '+' ? ' add' : mark === '-' ? ' del' : ''}`);
+    const code = el('span', 'dc');
+    code.innerHTML = highlight(text, lang) || ' ';
+    row.append(el('span', 'dno', String(no)), el('span', 'dm', mark === ' ' ? '' : mark), code);
+    body.append(row);
+  }
+  if (it.cut) body.append(el('div', 'dgap', txt('chat.diff.cut', { n: it.cut })));
+  d.append(body);
+  if (rows.length > DIFF_FOLD) {
+    d.classList.add('long');
+    const more = el('button', 'msg-more', txt('chat.diff.more', { n: rows.length }));
+    more.type = 'button';
+    more.onclick = () => {
+      const open = d.classList.toggle('open');
+      more.textContent = open ? txt('chat.diff.less') : txt('chat.diff.more', { n: rows.length });
+      const gap = d.getBoundingClientRect().top - chat.getBoundingClientRect().top;
+      if (!open && gap < 0) chat.scrollTop += gap - 12;
+      updateChatHead();
+      queueChatRail();
+    };
+    d.append(more);
+  }
   return d;
 }

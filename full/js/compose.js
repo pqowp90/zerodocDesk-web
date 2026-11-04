@@ -105,10 +105,10 @@ function renderAtts() {
     const img = Object.assign(document.createElement('img'), { src: a.url, alt: '' });
     const x = el('button', 'x', '×');
     x.type = 'button';
-    x.title = '첨부 빼기';
+    x.title = txt('compose.att.remove');
     x.onclick = () => removeAtt(a);
     box.append(img, x);
-    box.title = a.path || '올리는 중…';
+    box.title = a.path || txt('compose.att.uploading');
     return box;
   }));
 }
@@ -120,7 +120,7 @@ function renderQuotes() {
     box.title = q;
     const x = el('button', 'x', '×');
     x.type = 'button';
-    x.title = '인용 빼기';
+    x.title = txt('compose.quote.remove');
     x.onclick = () => { quotes = quotes.filter((o) => o !== q); renderQuotes(); focusInput(); };
     box.append(el('span', 'qmark', '❝'), el('span', 'qt', q.replace(/\s+/g, ' ')), x);
     return box;
@@ -155,8 +155,8 @@ function toBase64(bytes) {
 /** Uploads an image to the desktop in chunks (data channel messages must stay small). */
 async function addImage(file) {
   const ext = IMG_EXT[file.type];
-  if (!ext) { toast('PNG·JPG·GIF·WebP 이미지만 첨부할 수 있어요'); return; }
-  if (file.size > UPLOAD_MAX) { toast('이미지가 너무 커요 (최대 20MB)'); return; }
+  if (!ext) { toast(txt('compose.att.type')); return; }
+  if (file.size > UPLOAD_MAX) { toast(txt('compose.att.big')); return; }
   const uid = [...crypto.getRandomValues(new Uint8Array(12))].map((b) => b.toString(16).padStart(2, '0')).join('');
   const a = { uid, url: URL.createObjectURL(file), path: null };
   atts.push(a);
@@ -166,7 +166,7 @@ async function addImage(file) {
   for (let seq = 0, off = 0; ; seq++, off += CHUNK) {
     if (!atts.includes(a)) return; // removed while uploading
     while (ws && ws.readyState === 1 && ws.bufferedAmount > (1 << 20)) await sleep(30);
-    if (!ws || ws.readyState !== 1) { removeAtt(a); toast('연결이 끊겨 이미지를 못 올렸어요'); return; }
+    if (!ws || ws.readyState !== 1) { removeAtt(a); toast(txt('compose.att.disconnected')); return; }
     const last = off + CHUNK >= bytes.length;
     send({ t: 'upload', uid, seq, last, ext, d: toBase64(bytes.subarray(off, off + CHUNK)) });
     if (last) return;
@@ -189,16 +189,17 @@ async function sendCompose() {
   acClose();
   const s = sessions.get(active);
   const text = composeText();
-  if (atts.some((a) => !a.path)) { sendWhenUploaded = true; toast('이미지를 다 올리면 보낼게요', 2000); return; }
+  if (atts.some((a) => !a.path)) { sendWhenUploaded = true; toast(txt('compose.att.send_later'), 2000); return; }
   if (!text && !atts.length) { input(s.id, '\r'); return; } // empty Enter: confirm menus etc.
   // Claude is still starting: keys typed now can be lost, so hold it until its prompt is up.
   if (notReady(s)) { holdCompose(); return; }
   // A menu is waiting: typed into it, the message would be lost (or pick something). Hold it
   // until the menu is answered. A question with a free-text option takes the typing, so not there.
-  const m = s.info.claude && s.info.menu;
+  // Not an optional survey (asking stays off for it): Claude Code takes messages under it.
+  const m = s.info.claude && s.info.asking && s.info.menu;
   if (m && !m.options.some((o) => /^type something/i.test(o.label))) {
     holdCompose();
-    toast('메뉴에 먼저 답해 주세요. 답하면 이 메시지를 보낼게요', 3000);
+    toast(txt('compose.menu_first'), 3000);
     return;
   }
   const sent = atts;
@@ -223,7 +224,10 @@ async function deliver(s, text, sent) {
     await sleep(80);
     URL.revokeObjectURL(a.url);
   }
-  if (text.includes('\n')) bp ? paste(text) : input(s.id, text.replace(/\n/g, '\r'));
+  // Under an optional survey a leading "1" typed on its own would answer it: paste the text whole.
+  const survey = s.info.menu?.options.some((o) => o.key);
+  if (bp && survey && text) paste(text);
+  else if (text.includes('\n')) bp ? paste(text) : input(s.id, text.replace(/\n/g, '\r'));
   else if (text) input(s.id, text);
   // Let the TUI absorb the paste before Enter, or it may land inside it.
   await sleep(text.length > 200 || sent.length ? 150 : 30);
@@ -285,7 +289,7 @@ function acRender() {
   acList.replaceChildren(...ac.items.map((it, i) => {
     const row = el('div', 'ac-i' + (i === ac.sel ? ' sel' : ''));
     row.append(el('span', 'ac-l ' + it.kind, it.label));
-    if (it.kind === 'skill') row.append(el('span', 'ac-k', '스킬'));
+    if (it.kind === 'skill') row.append(el('span', 'ac-k', txt('compose.skill')));
     if (it.desc) row.append(el('span', 'ac-d', it.desc));
     row.title = it.desc ? `${it.label}\n${it.desc}` : it.label;
     row.onmousemove = () => { if (ac && ac.sel !== i) { ac.sel = i; acRender(); } };

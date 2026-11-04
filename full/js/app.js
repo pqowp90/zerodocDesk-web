@@ -66,13 +66,45 @@ const termThemes = {
   },
 };
 let themeName = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
-const termTheme = () => termThemes[themeName];
+
+// ---- theme colors: this PC's (theme.rs sends every theme's palette in the prefs) ----
+// Cached so the next load paints with them before the prefs arrive.
+/** @type {null | {mode:string, colors:{bg:string,fg:string,accent:string}, preset:string|null, palette:Object<string,string>}[]} */
+let themeViews = null;
+try { const v = JSON.parse(load('zd-themes')); if (Array.isArray(v)) themeViews = v; } catch {}
+/** Palette key → CSS variable (style.css keeps the default values). */
+const PALETTE_VARS = {
+  bg: '--bg', panel: '--panel', line: '--line', text: '--text', dim: '--dim', faint: '--faint', hover: '--hover',
+  focus: '--focus', code: '--code', strong: '--strong', accent: '--accent', on_accent: '--on-accent',
+};
+const palette = (mode = themeName) => themeViews?.find((t) => t.mode === mode)?.palette;
+function applyPalette() {
+  const p = palette(), st = document.documentElement.style;
+  for (const [k, v] of Object.entries(PALETTE_VARS)) p?.[k] ? st.setProperty(v, p[k]) : st.removeProperty(v);
+}
+applyPalette();
+/** The prefs brought the PC's theme colors (null = an older desktop app: the built-in ones). */
+function setThemeViews(list) {
+  themeViews = Array.isArray(list) ? list : null;
+  store('zd-themes', themeViews ? JSON.stringify(themeViews) : undefined);
+  applyPalette();
+  for (const s of sessions.values()) s.term.options.theme = termTheme();
+  syncThemeColor();
+  renderThemePane();
+}
+function termTheme() {
+  const p = palette();
+  if (!p) return termThemes[themeName];
+  return { ...termThemes[themeName], background: p.bg, foreground: p.text, cursor: p.accent, cursorAccent: p.bg,
+    selectionBackground: p.selection };
+}
 /** The desktop window also recolors its title bar (the server hands it to the window). */
 function syncWindowTheme() { if (isDesktop && !p2pMode) send({ t: 'theme', theme: themeName }); }
 function setTheme(name) {
   themeName = name === 'light' ? 'light' : 'dark';
   store('zd-theme', themeName);
   document.documentElement.dataset.theme = themeName;
+  applyPalette();
   for (const s of sessions.values()) s.term.options.theme = termTheme();
   syncWindowTheme();
   syncThemeColor();
@@ -85,7 +117,12 @@ function syncThemeColor() {
 }
 syncThemeColor();
 function renderThemePane() {
-  for (const b of document.querySelectorAll('.theme-opt')) b.classList.toggle('on', b.dataset.theme === themeName);
+  for (const b of document.querySelectorAll('.theme-opt')) {
+    b.classList.toggle('on', b.dataset.theme === themeName);
+    const p = palette(b.dataset.theme), st = b.querySelector('.tprev').style;
+    p ? (st.setProperty('--p', p.panel), st.setProperty('--b', p.bg)) : (st.removeProperty('--p'), st.removeProperty('--b'));
+  }
+  renderThemeColors(); // settings.js
 }
 
 function send(obj) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj)); }
@@ -222,7 +259,7 @@ function activate(id) {
 /** No tab bar any more (the sidebar lists conversations); this only keeps the empty-state hint. */
 function renderTabs() {
   if (!sessions.size) {
-    if (!$('#terms .empty')) $('#terms').append(Object.assign(document.createElement('div'), { className: 'empty', textContent: '+ Claude 로 새 탭을 여세요' }));
+    if (!$('#terms .empty')) $('#terms').append(Object.assign(document.createElement('div'), { className: 'empty', textContent: txt('app.empty_tabs') }));
   } else {
     $('#terms .empty')?.remove();
   }

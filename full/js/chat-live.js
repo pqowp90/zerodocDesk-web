@@ -20,6 +20,19 @@ wSpin.append(wGlyph, wVerb, wMeta);
 chatWorking.append(wTool, wSpin);
 const live = { key: null, verb: '', secs: null, at: 0, tokens: null, tokFrom: 0, tokAt: 0, arrow: '', extra: '', frame: -1, raf: 0 };
 
+// ---- background work left running after the turn (subagents, shells, monitors) ----
+// Claude is idle but they still go on: a quiet line under the last reply, like the CLI's footer.
+const chatBg = el('div', 'chat-bg');
+const chatBgText = el('span');
+chatBg.append(el('span', 'bg-ring'), chatBgText);
+/** "에이전트 1개 · 모니터 1개 · 셸 2개 실행 중" from the server's counts (`jobs`); generic when it sent none. */
+function bgText(info) {
+  const j = info.jobs || {};
+  const parts = [['agent', 'bg.agent'], ['monitor', 'bg.monitor'], ['shell', 'bg.shell'], ['other', 'bg.other']]
+    .filter(([k]) => j[k] > 0).map(([k, id]) => txt(id, { n: j[k] }));
+  return parts.length ? txt('bg.running', { what: parts.join(' · ') }) : txt('bg.running_any');
+}
+
 /** "✻ Symbioting… (1m 3s · ↓ 1.2k tokens · esc to interrupt)" → parts; null if it isn't a spinner line. */
 function parseSpinner(line) {
   const m = line.trim().match(/^(\S)\s+(.*?…)\s*(?:\((.*)\))?\s*$/);
@@ -75,7 +88,7 @@ function updateChatWorking(s) {
   const spin = rows.length ? parseSpinner(rows[rows.length - 1]) : null;
   renderLiveTool(spin ? rows.slice(0, -1) : []);
   const now = performance.now();
-  const verb = spin ? spin.verb : 'Claude가 작업 중이에요…';
+  const verb = spin ? spin.verb : txt('chat.working');
   if (verb !== live.verb) {
     live.verb = verb;
     wVerb.textContent = verb;
@@ -126,6 +139,7 @@ function renderChat(force) {
     rebuilt = true;
   }
   chatWorking.remove();
+  chatBg.remove();
   chatNote.remove();
   chatMenu.remove();
   chatPend.remove();
@@ -134,22 +148,43 @@ function renderChat(force) {
   const animate = !rebuilt && items.length - shown.n <= 3;
   for (let i = shown.n; i < items.length; i++) {
     const it = items[i];
+    if (it.k === 'failed') { markFailed(it.call); continue; }
     const node = chatItemEl(it);
     if (animate) node.classList.add('enter');
     // Tool calls in a row share one compact block.
     const last = chatCol.lastElementChild;
-    if (it.k === 'tool') {
+    if (it.k === 'tool' || it.k === 'diff') {
       const box = last && last.classList.contains('tools') ? last : chatCol.appendChild(el('div', 'tools'));
-      box.append(node);
+      // A change goes under the call that made it (calls made together come before their
+      // results), whose line then carries its counts.
+      const call = it.k === 'diff' && it.call && [...box.querySelectorAll('.tool[data-call]')].find((t) => t.dataset.call === it.call);
+      if (call && !call.querySelector('.dcount')) {
+        call.append(diffCounts(it));
+        call.after(node);
+        linkDiff(call, node);
+      } else {
+        if (it.k === 'diff') {
+          const head = diffHead(it);
+          node.prepend(head);
+          linkDiff(head, node);
+        }
+        box.append(node);
+      }
     } else chatCol.append(node);
   }
   shown.n = items.length;
+  foldDiffs(s.info.busy);
   const pend = s.pending || [];
-  if (!items.length && !pend.length && !s.info.busy && !s.info.menu) chatCol.append(el('div', 'chat-empty', s.chat ? '아래에 메시지를 입력해 대화를 시작하세요' : '불러오는 중…'));
+  if (!items.length && !pend.length && !s.info.busy && !s.info.menu) chatCol.append(el('div', 'chat-empty', s.chat ? txt('chat.empty') : txt('chat.loading')));
   updateChatWorking(s);
   const menuNew = updateChatMenu(s);
+  // An optional survey can be up while Claude works: both show then.
+  if (s.info.busy && !(s.info.menu && !s.info.menu.options.some((o) => o.key))) chatCol.append(chatWorking);
   if (s.info.menu) chatCol.append(chatMenu);
-  else if (s.info.busy) chatCol.append(chatWorking);
+  else if (s.info.background && !s.info.busy) {
+    chatBgText.textContent = bgText(s.info);
+    chatCol.append(chatBg);
+  }
   if (s.note) {
     if (s.note !== noteKey) { noteKey = s.note; chatNote.innerHTML = md(s.note); }
     chatCol.insertBefore(chatNote, chatCol.querySelector(':scope > .chat-menu, :scope > .chat-working'));
@@ -168,7 +203,7 @@ const chatHead = el('div', 'chat-head');
 const chatHeadIn = el('div', 'ch-in');
 const chatHeadQ = el('button', 'ch-q');
 chatHeadQ.type = 'button';
-chatHeadQ.title = '이 질문으로 가기';
+chatHeadQ.title = txt('chat.goto_question');
 const chatHeadT = el('span', 'ch-t'); // a span inside: line clamping doesn't work on a button itself
 chatHeadQ.append(chatHeadT);
 chatHeadIn.append(chatHeadQ);
@@ -289,7 +324,7 @@ function renderChatPending(pend, busy) {
   chatPend.replaceChildren(...pend.map((p) => {
     const d = el('div', `msg user pending${longText(p.text) ? ' long' : ''}`);
     d.append(el('span', 'msg-t', (p.images ? `🖼${p.images} ` : '') + p.text));
-    d.append(el('span', 'pend-note', busy ? '지금 단계가 끝나면 전달돼요' : '보내는 중…'));
+    d.append(el('span', 'pend-note', busy ? txt('chat.pend.busy') : txt('chat.pend.sending')));
     return d;
   }));
   return grew;
@@ -308,16 +343,39 @@ function updateChatMenu(s) {
   if (key === menuKey) return false;
   const fresh = !menuKey || JSON.parse(menuKey)[0] !== s.id || JSON.parse(menuKey)[1].title !== m.title;
   menuKey = key;
-  menuSel = m.sel;
+  // An optional question answered by one key (session survey): nothing is highlighted.
+  const byKey = m.options.some((o) => o.key);
+  menuSel = byKey ? -1 : m.sel;
   const parts = [];
+  // An AskUserQuestion with several questions: their headers as tabs, as Claude Code shows them
+  // (an older desktop app sends none). No current one = its last page, "Submit".
+  const tabs = m.tabs || [];
+  if (tabs.length > 1 || (tabs.length && m.tab == null)) {
+    const row = el('div', 'mtabs');
+    tabs.forEach((h, i) => row.append(el('span', i === m.tab ? 'mtab on' : 'mtab', h)));
+    row.append(el('span', m.tab == null ? 'mtab on' : 'mtab', txt('chat.menu.submit_tab')));
+    parts.push(row);
+  }
   if (m.title) parts.push(el('div', 'mtitle', m.title));
-  const list = el('div', 'mopts');
+  // A survey's few short answers sit in one row, as Claude Code draws them.
+  const list = el('div', byKey ? 'mopts keys' : 'mopts');
+  // A settings dialog: rows holding a value ("Also scan shell history  true") read as one
+  // grouped list, and a row without one ("Continue") as a button of its own. DOM order stays the
+  // options' order, which paintMenuSel relies on.
+  const valued = (o) => o.num === null && !o.key && /\S\s{2,}\S/.test(o.label);
+  const settings = m.options.some(valued);
+  let group = null;
   m.options.forEach((o, i) => {
     const b = el('button', 'mopt');
     b.type = 'button';
-    // A menu without numbers (settings-style dialog) sends num: null; an older desktop app none.
-    if (o.num !== null) {
-      b.append(el('span', 'mnum', `${o.num ?? i + 1}`), el('span', 'mlabel', o.label));
+    if (o.key) {
+      b.append(el('span', 'mnum', o.key), el('span', 'mlabel', o.label));
+    } else if (o.num !== null) {
+      // A menu without numbers (settings-style dialog) sends num: null; an older desktop app none.
+      const lab = el('span', 'mlabel', o.label);
+      // A question taking several answers: Enter (a click) checks or unchecks one.
+      if (o.checked != null) lab.prepend(el('span', o.checked ? 'mcheck on' : 'mcheck', o.checked ? '☑' : '☐'));
+      b.append(el('span', 'mnum', `${o.num ?? i + 1}`), lab);
     } else {
       // "Also scan shell history     true": the setting, then its value on the right.
       b.classList.add('plain');
@@ -328,31 +386,55 @@ function updateChatMenu(s) {
     }
     if (o.desc) b.append(el('span', 'mdesc', o.desc));
     b.onclick = () => pickMenu(s.id, i);
-    list.append(b);
+    if (settings && valued(o)) {
+      if (!group) list.append(group = el('div', 'mgroup'));
+      group.append(b);
+    } else {
+      if (settings) b.classList.add('action');
+      group = null;
+      list.append(b);
+    }
   });
   parts.push(list);
+  // The highlighted option's preview (a mockup, code), drawn as Claude Code boxes it beside the
+  // options; it follows the highlight once the server reads the screen again.
+  if (m.preview) parts.push(el('pre', 'mpreview', m.preview));
   // Text between the options and the key hint (an older desktop app sends none).
   if (m.note) parts.push(el('div', 'mtitle mnote', m.note));
   const foot = el('div', 'mfoot');
-  const esc = el('button', 'act ghost', '취소 (Esc)');
+  const esc = el('button', 'act ghost', txt('chat.cancel_esc'));
   esc.type = 'button';
   esc.onclick = () => { input(s.id, '\x1b'); ta.focus(); };
-  const peek = el('button', 'act ghost', '터미널로 보기');
+  const peek = el('button', 'act ghost', txt('chat.menu.peek'));
   peek.type = 'button';
-  peek.title = '이 메뉴만 터미널에서 직접 골라요. 답하면 대화창으로 돌아와요.';
+  peek.title = txt('chat.menu.peek_tip');
   peek.onclick = () => { termPeek = s.id; syncChat(true); focusInput(); };
-  foot.append(esc, peek);
-  // Dialogs whose rows hold a value ("←/→ to change"): buttons for that, and the hint as shown.
-  if (m.hint && m.hint.includes('←')) {
-    for (const [label, k] of [['◀', 'D'], ['▶', 'C']]) {
+  // The survey has no Esc; its own "닫기" option dismisses it.
+  if (byKey) foot.append(peek);
+  else foot.append(esc, peek);
+  // Several questions, or one taking several answers: ←/→ move between them and to "Submit".
+  const stepped = tabs.length > 1 || m.options.some((o) => o.checked != null);
+  if (stepped) {
+    for (const [label, k, tip] of [['◀', 'D', 'chat.menu.prev_q'], ['▶', 'C', 'chat.menu.next_q']]) {
       const b = el('button', 'act ghost', label);
       b.type = 'button';
-      b.title = '고른 줄의 값 바꾸기';
+      b.title = txt(tip);
       b.onclick = () => { input(s.id, arrowKey(s, k)); ta.focus(); };
       foot.append(b);
     }
   }
-  foot.append(el('span', 'mhint', m.hint && m.options.every((o) => o.num === null) ? m.hint : '↑↓ · Enter로도 고를 수 있어요'));
+  // Dialogs whose rows hold a value ("←/→ to change"): buttons for that, and the hint as shown.
+  if (!stepped && m.hint && m.hint.includes('←')) {
+    for (const [label, k] of [['◀', 'D'], ['▶', 'C']]) {
+      const b = el('button', 'act ghost', label);
+      b.type = 'button';
+      b.title = txt('chat.menu.adjust');
+      b.onclick = () => { input(s.id, arrowKey(s, k)); ta.focus(); };
+      foot.append(b);
+    }
+  }
+  foot.append(el('span', 'mhint', byKey ? txt('chat.menu.optional')
+    : m.hint && m.options.every((o) => o.num === null) ? m.hint : txt('chat.menu.keys')));
   parts.push(foot);
   chatMenu.classList.remove('busy');
   chatMenu.replaceChildren(...parts);
@@ -366,7 +448,7 @@ function paintMenuSel() {
 
 function moveMenuSel(d) {
   const m = active !== null && sessions.get(active)?.info.menu;
-  if (!m || !chatShown()) return;
+  if (!m || !chatShown() || m.options.some((o) => o.key)) return;
   menuSel = Math.max(0, Math.min(m.options.length - 1, menuSel + d));
   paintMenuSel();
 }
@@ -382,6 +464,9 @@ async function pickMenu(id, i) {
   if (!s || !s.info.menu || chatMenu.classList.contains('busy')) return;
   chatMenu.classList.add('busy'); // until the server shows the next state
   setTimeout(() => chatMenu.classList.remove('busy'), 3000); // or the pick didn't take
+  // A question answered by one key takes just that key.
+  const k = s.info.menu.options[i]?.key;
+  if (k) { input(id, k); ta.focus(); return; }
   // From where the highlight is now (↑↓ may have moved it since the server last looked).
   const d = i - menuSel;
   menuSel = i;
@@ -406,7 +491,9 @@ for (const b of document.querySelectorAll('#mode button')) b.onclick = () => set
 // ---- quote: select text in the conversation, then "인용" (or Ctrl+L) puts it in the input box ----
 const quoteBtn = el('button', 'quote-btn');
 quoteBtn.type = 'button';
-quoteBtn.append(el('span', '', '인용'), el('kbd', '', 'Ctrl+L'));
+const quoteKbd = el('kbd', '', '');
+quoteKbd.dataset.keyKbd = 'quote'; // filled from the shortcut table (keys.js)
+quoteBtn.append(el('span', '', txt('chat.quote')), quoteKbd);
 quoteBtn.hidden = true;
 document.body.append(quoteBtn);
 let quoteDrag = false; // a mouse drag in the chat is still going: show the button once it ends
@@ -457,9 +544,10 @@ let quoteTimer = 0;
 document.addEventListener('selectionchange', () => { clearTimeout(quoteTimer); quoteTimer = setTimeout(placeQuote, touch ? 250 : 60); });
 chat.addEventListener('scroll', () => { if (!quoteBtn.hidden || quoteRange()) placeQuote(); }, { passive: true });
 addEventListener('resize', () => { if (!quoteBtn.hidden) placeQuote(); });
-// Ctrl+L quotes only while there is a selection in the conversation; otherwise it stays the terminal's.
+// The quote key (Ctrl+L by default) quotes only while there is a selection in the conversation;
+// otherwise it stays the terminal's.
 addEventListener('keydown', (e) => {
-  if (e.ctrlKey && !e.shiftKey && !e.altKey && (e.code === 'KeyL' || e.key.toLowerCase() === 'l') && quoteRange()) { e.preventDefault(); e.stopPropagation(); quoteSel(); }
+  if (keyAction(e) === 'quote' && quoteRange()) { e.preventDefault(); e.stopPropagation(); quoteSel(); }
 }, true);
 
 syncChat(true);

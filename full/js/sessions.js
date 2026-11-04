@@ -17,12 +17,12 @@ function notifyDone(s) {
   s.unread = true;
   s.done = true; // blue dot in the sidebar until you open it
   const name = (s.osTitle || s.info.title).replace(/^[⠀-⣿✳*·\s]+/, '').slice(0, 40) || 'Claude';
-  toast(`✓ ${name} 작업이 끝났어요`, 6000);
+  toast(txt('sessions.done_toast', { name }), 6000);
   const t = $('#toast');
   t.onclick = () => { activate(s.id); t.hidden = true; };
   if (canNotify && Notification.permission === 'granted' && (document.hidden || !document.hasFocus())) {
     try {
-      const n = new Notification('작업 끝남', { body: name, tag: `zd-${s.id}` });
+      const n = new Notification(txt('sessions.done_title'), { body: name, tag: `zd-${s.id}` });
       n.onclick = () => { focus(); activate(s.id); n.close(); };
     } catch {}
   }
@@ -99,7 +99,7 @@ function onRemote(m) {
   $('#remote-on').checked = m.on;
   const box = $('#remote-urls');
   box.replaceChildren(...m.urls.map((u) => Object.assign(document.createElement('a'), { href: u, textContent: u, target: '_blank' })));
-  if (m.on && !m.urls.length) box.textContent = `포트 ${m.port} 에서 대기 중 (LAN IP를 찾지 못했어요)`;
+  if (m.on && !m.urls.length) box.textContent = txt('sessions.lan.waiting', { port: m.port });
 
   $('#web-url').textContent = (m.web_url || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
   const list = $('#paired');
@@ -107,19 +107,19 @@ function onRemote(m) {
     const row = Object.assign(document.createElement('div'), { className: 'device' });
     const name = Object.assign(document.createElement('span'), { textContent: `📱 ${d.name}` });
     name.title = d.pubkey;
-    const del = Object.assign(document.createElement('button'), { textContent: '연결 해제' });
-    del.onclick = () => { if (confirm(`${d.name} 의 접속 권한을 지울까요?`)) send({ t: 'unpair', pubkey: d.pubkey }); };
+    const del = Object.assign(document.createElement('button'), { textContent: txt('sessions.unpair') });
+    del.onclick = () => { if (confirm(txt('sessions.unpair_confirm', { name: d.name }))) send({ t: 'unpair', pubkey: d.pubkey }); };
     row.append(name, del);
     return row;
   }));
-  $('#peers').textContent = m.peers ? `지금 P2P로 연결된 기기: ${m.peers}대` : '';
+  $('#peers').textContent = m.peers ? txt('sessions.peers', { n: m.peers }) : '';
   turnOn = !!m.turn;
   turnState();
   if (localDesk) {
     $('#conn').className = m.peers ? 'dot on' : 'dot idle';
-    $('#remote-btn').title = m.peers ? `리모트 · 지금 연결된 기기 ${m.peers}대` : '리모트 · 지금 연결된 기기 없음';
+    $('#remote-btn').title = m.peers ? txt('remote.tip.peers', { n: m.peers }) : txt('remote.tip.none');
   }
   // A device just paired (the QR is single-use): hide it.
-  if ((m.paired || []).length > pairedCount && !$('#pair-box').hidden) { $('#pair-box').hidden = true; toast('기기가 연결됐어요'); }
+  if ((m.paired || []).length > pairedCount && !$('#pair-box').hidden) { $('#pair-box').hidden = true; toast(txt('sessions.paired_toast')); }
   pairedCount = (m.paired || []).length;
 }

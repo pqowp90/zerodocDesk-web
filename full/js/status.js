@@ -5,11 +5,11 @@
 let usage = null;
 function untilText(iso) {
   const ms = Date.parse(iso) - Date.now();
-  if (!(ms > 0)) return '곧';
+  if (!(ms > 0)) return txt('status.soon');
   const min = Math.round(ms / 60000), h = Math.floor(min / 60), d = Math.floor(h / 24);
-  if (d >= 1) return `${d}일 ${h % 24}시간 후`;
-  if (h >= 1) return `${h}시간 ${min % 60}분 후`;
-  return `${Math.max(1, min)}분 후`;
+  if (d >= 1) return txt('status.in_dh', { d, h: h % 24 });
+  if (h >= 1) return txt('status.in_hm', { h, m: min % 60 });
+  return txt('status.in_m', { m: Math.max(1, min) });
 }
 function whenText(iso) {
   const t = new Date(iso);
@@ -48,16 +48,15 @@ function renderChatUse(ctx, share) {
     const ring = document.createElement('i');
     ring.style.setProperty('--p', cp + '%');
     cel.replaceChildren(ring, cp + '%');
-    cel.title = `컨텍스트 ${cp}% 사용 (${ctxTokens(ctx.used, ctx.max)} 토큰) · 눌러서 지금 요약하기`;
+    cel.title = txt('status.ctx.title', { pct: cp, tokens: ctxTokens(ctx.used, ctx.max) });
   }
   renderCtxMenu();
   // [short label, name in the tooltip, share]
-  const shares = share ? [['5h', '세션', share.session], ['7d', '주간', share.weekly]].filter(([, , x]) => x != null) : [];
+  const shares = share ? [['5h', txt('status.share.session'), share.session], ['7d', txt('status.share.weekly'), share.weekly]].filter(([, , x]) => x != null) : [];
   sel.hidden = !shares.length;
   if (shares.length) {
     sel.textContent = shares.map(([l, , x]) => `${l} ${shareText(x)}`).join(' · ');
-    sel.title = `이 대화가 쓴 몫: ${shares.map(([, n, x]) => `${n} 한도의 약 ${shareText(x)}`).join(', ')}\n`
-      + '이 PC의 Claude Code 기록으로 어림한 값이라 다른 기기 사용분은 몰라요';
+    sel.title = txt('status.share.title', { parts: shares.map(([, n, x]) => txt('status.share.part', { name: n, share: shareText(x) })).join(', ') });
   }
 }
 function renderUsage() {
@@ -72,21 +71,21 @@ function renderUsage() {
   const u = (tab && tab.info.claude && accountOf(tab)) || usage;
   // [short label on the bar, name in the tooltip, limit]
   const items = u ? [
-    ['5h', '세션(5시간)', u.session],
-    ['7d', '주간(7일)', u.weekly],
+    ['5h', txt('status.usage.session'), u.session],
+    ['7d', txt('status.usage.weekly'), u.weekly],
   ].filter(([, , l]) => l) : [];
   // Per-model weekly limits (e.g. Fable), counted apart from the all-models one: tooltip only, not on the bar.
-  const scoped = u ? (u.scoped || []).map((l) => [l.name, `${l.name}(7일)`, l]) : [];
+  const scoped = u ? (u.scoped || []).map((l) => [l.name, txt('status.usage.scoped', { name: l.name }), l]) : [];
   el.hidden = !items.length;
   if (el.hidden) return;
   el.replaceChildren(...items.map(([label, , l]) => usageItem(label, l.pct)));
   const lines = [];
   for (const [, name, l] of [...items, ...scoped]) {
-    const r = l.resets_at ? ` · ${untilText(l.resets_at)} 초기화 (${whenText(l.resets_at)})` : '';
-    lines.push(`${name} ${Math.round(l.pct)}% 사용${r}`);
+    const r = l.resets_at ? txt('status.usage.resets', { until: untilText(l.resets_at), when: whenText(l.resets_at) }) : '';
+    lines.push(txt('status.usage.line', { name, pct: Math.round(l.pct), resets: r }));
   }
-  if (u && u.plan) lines.push(`플랜: ${u.plan}`);
-  if (usage) lines.push('클릭하면 지금 다시 확인해요');
+  if (u && u.plan) lines.push(txt('status.usage.plan', { plan: u.plan }));
+  if (usage) lines.push(txt('status.usage.refresh'));
   el.title = lines.join('\n');
 }
 // A login finishing turns the tab's chat back on: syncChat looks at the accounts too.
@@ -100,7 +99,7 @@ function onUsage(m) {
   if (sw && (!seen || seen.at !== sw.at || seen.tab !== sw.tab) && Date.now() / 1000 - sw.at < 120) {
     const to = accountsList().find((a) => a.id === sw.to);
     const tab = sessions.get(sw.tab);
-    toast(`사용량 한도에 닿아서 ${tab ? `'${tab.info.title}' 탭을 ` : ''}${to ? accountName(to) : sw.to} 계정으로 바꿔 이어서 해요`, 8000);
+    toast(txt('status.acct.switched', { tab: tab ? txt('status.acct.switched_tab', { title: tab.info.title }) : '', account: to ? accountName(to) : sw.to }), 8000);
   }
 }
 $('#usage').addEventListener('click', () => send({ t: 'usage' }));
@@ -123,9 +122,9 @@ function applyOpt(key, cmd, value) {
   if (s && s.info.claude && s.info.alive && !s.info.busy && !s.info.asking) {
     input(s.id, `/${cmd} ${value}`);
     setTimeout(() => input(s.id, '\r'), 60);
-    optHint('지금 탭에 적용했어요');
+    optHint(txt('status.opt.applied_now'));
   } else {
-    optHint('새 Claude 탭부터 적용돼요');
+    optHint(txt('status.opt.applied_new'));
   }
   focusInput();
 }
@@ -144,7 +143,7 @@ addEventListener('drop', (e) => {
   $('#compose').classList.remove('drag');
   if (!composeShown()) {
     const s = active !== null && sessions.get(active);
-    if (!s || !s.info.claude) { toast('이미지는 Claude 탭에 첨부할 수 있어요'); return; }
+    if (!s || !s.info.claude) { toast(txt('status.attach.claude_only')); return; }
     setChatPref(true); // attachments live in the conversation's input box
   }
   [...e.dataTransfer.files].forEach(addImage);
@@ -243,7 +242,7 @@ function needsLogin(s) { const a = accountOf(s); return !!(a && !a.signed_in); }
 /** "4h9m", "2d6h", "37m": time until `iso`. */
 function leftShort(iso) {
   const ms = Date.parse(iso) - Date.now();
-  if (!(ms > 0)) return '곧';
+  if (!(ms > 0)) return txt('status.soon');
   const min = Math.round(ms / 60000), h = Math.floor(min / 60), d = Math.floor(h / 24);
   if (d >= 1) return `${d}d${h % 24}h`;
   if (h >= 1) return `${h}h${min % 60}m`;
@@ -255,9 +254,9 @@ function renderAccount() {
   const a = s && s.info.claude && s.info.alive && accountOf(s);
   b.hidden = !a;
   if (b.hidden) { if (!acctMenu.hidden) closeAccountMenu(); return; }
-  b.textContent = a.signed_in ? accountName(a).split('@')[0] : `${a.id} (로그인 안 됨)`;
+  b.textContent = a.signed_in ? accountName(a).split('@')[0] : txt('status.acct.not_signed_in', { id: a.id });
   b.classList.toggle('warn', !a.signed_in);
-  b.title = `${accountName(a)}${planOf(a) ? ' · ' + planOf(a) : ''}\n누르면 이 탭의 계정을 바꿔요`;
+  b.title = txt('status.acct.btn_title', { name: accountName(a), plan: planOf(a) ? ' · ' + planOf(a) : '' });
   if (!acctMenu.hidden) fillAccountMenu();
 }
 /** "Claude Max 5x" (the server names it; an older desktop app sends only `plan`: "max"). */
@@ -281,7 +280,7 @@ function fillAccountMenu() {
     row.type = 'button';
     const check = el('span', 'cm-ic', a.id === cur ? '✓' : '');
     const main = el('span', 'acct-main');
-    const name = el('span', 'acct-name', a.signed_in ? accountName(a) : `${a.id} (로그인 안 됨)`);
+    const name = el('span', 'acct-name', a.signed_in ? accountName(a) : txt('status.acct.not_signed_in', { id: a.id }));
     if (a.signed_in && planOf(a)) name.append(el('span', 'acct-plan', ` · ${planOf(a)}`));
     const use = el('span', 'acct-use');
     use.append(acctLimit('5h', a.session), acctLimit('7d', a.weekly));
@@ -289,23 +288,23 @@ function fillAccountMenu() {
     row.append(check, main);
     // "자동": this account takes part in moving tabs on its own at a limit (an older desktop app sends none).
     if (a.auto !== undefined) {
-      const auto = el('span', 'acct-auto' + (a.auto ? ' on' : ''), '자동');
+      const auto = el('span', 'acct-auto' + (a.auto ? ' on' : ''), txt('status.acct.auto'));
       auto.setAttribute('role', 'switch');
       auto.setAttribute('aria-checked', a.auto ? 'true' : 'false');
       auto.title = a.auto
-        ? '자동 켜짐: 한도에 닿으면 탭이 여유 있는 다른 계정으로 넘어가 이어서 해요. 누르면 꺼요.'
-        : '자동 꺼짐: 이 계정은 한도에 닿아도 그대로 있고, 다른 계정 탭도 이리로 넘어오지 않아요. 누르면 켜요.';
+        ? txt('status.acct.auto_on')
+        : txt('status.acct.auto_off');
       auto.onclick = (e) => { e.stopPropagation(); send({ t: 'account_auto', account: a.id, on: !a.auto }); };
       row.append(auto);
     }
     row.onclick = (e) => {
       e.stopPropagation();
       closeAccountMenu();
-      if (a.id !== cur && s) { send({ t: 'account', id: s.id, account: a.id }); toast(`이 탭을 ${accountName(a)} 계정으로 바꾸는 중…`, 2500); }
+      if (a.id !== cur && s) { send({ t: 'account', id: s.id, account: a.id }); toast(txt('status.acct.switching', { account: accountName(a) }), 2500); }
     };
     return row;
   });
-  const add = menuItem('', '새 계정 추가', '', () => {
+  const add = menuItem('', txt('status.acct.add'), '', () => {
     closeAccountMenu();
     const ref = active !== null && sessions.get(active);
     const claudeTab = ref && ref.info.claude && ref.info.alive;
@@ -335,5 +334,5 @@ addEventListener('keydown', (e) => { if (e.key === 'Escape' && !acctMenu.hidden)
 addEventListener('resize', closeAccountMenu);
 function onAccountDone(m) {
   if (m.error) toast(m.error, 6000);
-  else if (m.added) toast('새 계정에 로그인해 주세요. 브라우저가 열려요.', 6000);
+  else if (m.added) toast(txt('status.acct.login_prompt'), 6000);
 }

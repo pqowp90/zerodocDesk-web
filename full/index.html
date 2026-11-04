@@ -23,32 +23,32 @@
   <!-- items with data-bar: order and visibility come from this PC's settings (topbar.rs);
        the rest (remote button, chat/terminal switch) stay fixed at the right end -->
   <header id="bar">
-    <button id="side-toggle" data-bar="side_toggle" class="icon" title="프로젝트 목록 (Ctrl+B)">☰</button>
+    <button id="side-toggle" data-bar="side_toggle" data-key="toggle_side" class="icon" data-i18n-title="top.side_toggle.tip">☰</button>
     <div id="tabs" data-bar="tabs"></div>
-    <button id="new-claude" data-bar="new_claude" class="act" title="새 Claude 탭 (Ctrl+Shift+T)">+ Claude</button>
-    <button id="new-shell" data-bar="new_shell" class="act ghost" title="새 셸 탭">+ 셸</button>
+    <button id="new-claude" data-bar="new_claude" data-key="new_tab" class="act" data-i18n-title="top.new_claude.tip">+ Claude</button>
+    <button id="new-shell" data-bar="new_shell" class="act ghost" data-i18n-title="top.new_shell.tip"><span data-i18n="top.new_shell.label"></span></button>
     <!-- fixed. Desktop window: opens settings › remote, the dot is green while another device is connected.
          Other devices (no remote settings there): just the dot, green while connected to the desktop. -->
-    <button id="remote-btn" type="button" class="act ghost" title="연결 상태"><span id="conn" class="dot off"></span><span class="rlabel">리모트</span></button>
+    <button id="remote-btn" type="button" class="act ghost" data-i18n-title="top.remote.tip"><span id="conn" class="dot off"></span><span class="rlabel" data-i18n="top.remote.label"></span></button>
     <!-- a Claude tab is either the conversation (with the input box) or the raw terminal -->
-    <div id="mode" title="대화 / 커맨드 전환 (Ctrl+Shift+Y)">
-      <button type="button" data-mode="chat">대화</button>
-      <button type="button" data-mode="term">커맨드</button>
+    <div id="mode" data-key="toggle_chat" data-i18n-title="top.mode.tip">
+      <button type="button" data-mode="chat" data-i18n="top.mode_chat.label"></button>
+      <button type="button" data-mode="term" data-i18n="top.mode_term.label"></button>
     </div>
   </header>
 
   <div id="workspace">
     <!-- desktop window only: floats at the top-right corner, under the window buttons -->
-    <button id="update-btn" type="button" class="act" hidden>업데이트</button>
+    <button id="update-btn" type="button" class="act" data-i18n="top.update.label" hidden></button>
     <aside id="side">
       <div class="side-head">
-        <span>프로젝트</span>
-        <button id="add-folder" class="icon" title="폴더 추가">＋</button>
-        <button id="refresh-projects" class="icon" title="새로고침">⟳</button>
+        <span data-i18n="side.projects.title"></span>
+        <button id="add-folder" class="icon" data-i18n-title="side.add_folder.tip">＋</button>
+        <button id="refresh-projects" class="icon" data-i18n-title="side.refresh.tip">⟳</button>
       </div>
-      <div id="projects"><div class="side-empty">불러오는 중…</div></div>
+      <div id="projects"><div class="side-empty" data-i18n="side.loading.text"></div></div>
       <div class="side-foot">
-        <button id="settings-btn" type="button" title="설정 · 스킬, 리모트, 업데이트"><span class="gear">⚙</span>설정</button>
+        <button id="settings-btn" type="button" data-i18n-title="side.settings.tip"><span class="gear">⚙</span><span data-i18n="side.settings.label"></span></button>
       </div>
     </aside>
     <div id="main-col">
@@ -69,16 +69,16 @@
           <div id="quote-list"></div>
           <div id="attach-list"></div>
           <textarea id="compose-text" rows="1" spellcheck="false"
-            placeholder="메시지 입력"></textarea>
+            data-i18n-ph="compose.text.ph"></textarea>
           <div class="cbar">
-            <button type="button" id="attach-btn" class="cicon" title="이미지 첨부 (붙여넣기·끌어다 놓기도 돼요)">＋</button>
+            <button type="button" id="attach-btn" class="cicon" data-i18n-title="compose.attach.tip">＋</button>
             <!-- AI model for Claude tabs: new tabs start with it; an idle Claude tab switches right away -->
             <div class="mpick">
-              <button type="button" id="model-btn" title="AI 모델 · 생각 수준"><span id="model-name"></span><span id="model-eff"></span><svg class="caret" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5 6 7.5 9 4.5"/></svg></button>
+              <button type="button" id="model-btn" data-i18n-title="compose.model.tip"><span id="model-name"></span><span id="model-eff"></span><svg class="caret" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5 6 7.5 9 4.5"/></svg></button>
               <div id="model-menu" hidden>
-                <div class="mm-h">모델</div>
+                <div class="mm-h" data-i18n="compose.model_menu.models_head"></div>
                 <div id="mm-models"></div>
-                <div class="mm-h">생각 수준</div>
+                <div class="mm-h" data-i18n="compose.model_menu.efforts_head"></div>
                 <div id="mm-efforts"></div>
               </div>
             </div>
@@ -90,23 +90,23 @@
             <div class="mpick" id="ctx-pick" hidden>
               <button type="button" id="chat-ctx"></button>
               <div id="ctx-menu" hidden>
-                <div class="mm-h">컨텍스트</div>
+                <div class="mm-h" data-i18n="compose.ctx_menu.head"></div>
                 <div id="ctx-info"></div>
-                <div class="ctx-note">가득 차면 Claude가 알아서 요약해요. 지금 요약하면 대화 내용을 줄여 자리를 비워요.</div>
-                <button type="button" id="compact-btn" class="cpill">지금 요약하기</button>
+                <div class="ctx-note" data-i18n="compose.ctx_menu.note"></div>
+                <button type="button" id="compact-btn" class="cpill" data-i18n="compose.compact.label"></button>
                 <div id="compact-why" class="ctx-note" hidden></div>
               </div>
             </div>
             <!-- Claude Code's permission mode (Shift+Tab in its terminal), for the active Claude tab -->
             <div class="mpick" id="mode-pick" hidden>
-              <button type="button" id="mode-btn" title="권한 모드 (Shift+Tab)"><span id="mode-ico" class="mico"></span><span id="mode-name"></span><svg class="caret" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5 6 7.5 9 4.5"/></svg></button>
+              <button type="button" id="mode-btn" data-i18n-title="compose.mode.tip"><span id="mode-ico" class="mico"></span><span id="mode-name"></span><svg class="caret" viewBox="0 0 12 12" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5 6 7.5 9 4.5"/></svg></button>
               <div id="mode-menu" hidden></div>
             </div>
-            <button type="button" id="queue-btn" class="cpill ghost" title="끝나면 전송 (Ctrl+Enter) · 작업이 끝나면 보내요" hidden>끝나면 전송</button>
-            <button type="button" id="now-btn" class="cpill" title="바로 전송 (Enter) · 작업 중인 Claude 에 끼워 넣어요" hidden>바로 전송</button>
+            <button type="button" id="queue-btn" class="cpill ghost" data-i18n-title="compose.queue.tip" data-i18n="compose.queue.label" hidden></button>
+            <button type="button" id="now-btn" class="cpill" data-i18n-title="compose.now.tip" data-i18n="compose.now.label" hidden></button>
             <!-- icons are inline SVG, not text glyphs: → and ■ sit off-center and change size per font -->
-            <button type="button" id="stop-btn" class="cround stop" title="정지 (Esc)" aria-label="정지" hidden><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="2.5" fill="currentColor"/></svg></button>
-            <button type="submit" id="send-btn" class="cround" title="전송 (Enter)" aria-label="전송"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12.5 5.5 19 12l-6.5 6.5"/></svg></button>
+            <button type="button" id="stop-btn" class="cround stop" data-i18n-title="compose.stop.tip" data-i18n-aria="compose.stop.aria" hidden><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><rect x="2" y="2" width="12" height="12" rx="2.5" fill="currentColor"/></svg></button>
+            <button type="submit" id="send-btn" class="cround" data-i18n-title="compose.send.tip" data-i18n-aria="compose.send.aria"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12.5 5.5 19 12l-6.5 6.5"/></svg></button>
           </div>
         </div>
         <input type="file" id="attach-file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>
@@ -128,69 +128,85 @@
   <nav id="keys">
     <button data-k="esc">Esc</button>
     <button data-k="tab">Tab</button>
-    <button data-k="stab" title="Shift+Tab (모드 전환)">⇧Tab</button>
+    <button data-k="stab" data-i18n-title="keybar.stab.tip">⇧Tab</button>
     <button data-k="up">↑</button>
     <button data-k="down">↓</button>
     <button data-k="ctrlc">^C</button>
-    <button data-k="nl" title="줄바꿈 (전송 안 함)">⏎줄</button>
+    <button data-k="nl" data-i18n-title="keybar.nl.tip" data-i18n="keybar.nl.label"></button>
     <button data-k="enter">Enter</button>
   </nav>
 
   <!-- settings: one dialog, a pane per topic -->
   <div id="settings" hidden>
-   <div class="set-box" role="dialog" aria-label="설정">
+   <div class="set-box" role="dialog" data-i18n-aria="settings.dialog.aria">
     <nav class="set-nav">
-      <h2>설정</h2>
-      <button type="button" data-pane="display">화면</button>
-      <button type="button" data-pane="notify">알림</button>
-      <button type="button" data-pane="skills">스킬</button>
-      <button type="button" data-pane="remote">리모트</button>
-      <button type="button" data-pane="update">업데이트</button>
+      <h2 data-i18n="settings.nav.title"></h2>
+      <button type="button" data-pane="display" data-i18n="settings.nav_display.label"></button>
+      <button type="button" data-pane="notify" data-i18n="settings.nav_notify.label"></button>
+      <button type="button" data-pane="shortcuts" data-i18n="settings.nav_shortcuts.label"></button>
+      <button type="button" data-pane="skills" data-i18n="settings.nav_skills.label"></button>
+      <button type="button" data-pane="remote" data-i18n="settings.nav_remote.label"></button>
+      <button type="button" data-pane="update" data-i18n="settings.nav_update.label"></button>
     </nav>
-    <button id="settings-close" class="icon" type="button" title="닫기 (Esc)">×</button>
+    <button id="settings-close" class="icon" type="button" data-i18n-title="settings.close.tip">×</button>
     <div class="set-body">
 
   <section id="display" class="pane" hidden>
-    <h2>화면</h2>
-    <p class="hint">테마는 기기마다 따로 정해요. 데스크탑 창은 맨 위 제목 표시줄 색도 같이 바뀌어요.</p>
+    <h2 data-i18n="settings.display.title"></h2>
+    <p class="hint" data-i18n="settings.display.theme_hint"></p>
     <div class="theme-pick">
-      <button type="button" class="theme-opt" data-theme="dark"><span class="tprev"></span>다크</button>
-      <button type="button" class="theme-opt" data-theme="light"><span class="tprev"></span>라이트</button>
+      <button type="button" class="theme-opt" data-theme="dark"><span class="tprev"></span><span data-i18n="settings.display.dark_label"></span></button>
+      <button type="button" class="theme-opt" data-theme="light"><span class="tprev"></span><span data-i18n="settings.display.light_label"></span></button>
     </div>
-    <div class="set-row"><label class="sw"><input type="checkbox" id="chat-usage"><span></span></label><label for="chat-usage">이 대화의 사용량 표시<span class="hint">입력창의 전송 버튼 왼쪽에 컨텍스트가 얼마나 찼는지, 세션·주간 사용량 중 이 대화가 쓴 몫(어림값)을 보여 줘요.</span></label></div>
-    <div class="set-row" id="menu-ko-row" hidden><label class="sw"><input type="checkbox" id="menu-translate"><span></span></label><label for="menu-translate">메뉴를 Claude로 번역<span class="hint">Claude Code가 영어로 띄우는 메뉴 중 자주 쓰는 건 바로 한국어로 바뀌어요. 이걸 켜면 나머지도 Claude(Haiku)가 번역해요. 처음 보는 메뉴는 몇 초 뒤에 바뀌고, 이 PC의 Claude 사용량을 조금 써요. 한 번 번역한 메뉴는 저장돼서 다음부터 바로 보여요.</span></label></div>
+    <!-- this PC's theme colors (desktop window only; theme.rs) -->
+    <div id="color-set" hidden>
+      <h2 class="sub" data-i18n="settings.display.colors_title"></h2>
+      <p class="hint" data-i18n="settings.display.colors_hint"></p>
+      <div id="theme-cards"></div>
+    </div>
+    <div class="set-row"><label class="sw"><input type="checkbox" id="chat-usage"><span></span></label><label for="chat-usage"><span data-i18n="settings.display.chat_usage_label"></span><span class="hint" data-i18n="settings.display.chat_usage_hint"></span></label></div>
+    <div class="set-row" id="link-browser-row" hidden><select id="link-browser"><option value="chrome" data-i18n="settings.display.link_browser_chrome"></option><option value="default" data-i18n="settings.display.link_browser_default"></option><option value="edge" data-i18n="settings.display.link_browser_edge"></option></select><label for="link-browser"><span data-i18n="settings.display.link_browser_label"></span><span class="hint" data-i18n="settings.display.link_browser_hint"></span></label></div>
+    <div class="set-row" id="menu-ko-row" hidden><label class="sw"><input type="checkbox" id="menu-translate"><span></span></label><label for="menu-translate"><span data-i18n="settings.display.menu_translate_label"></span><span class="hint" data-i18n="settings.display.menu_translate_hint"></span></label></div>
     <!-- hosted page (phones) only: install as an app, and on iPhone move the pairing into it -->
     <div id="install-set" hidden>
-      <h2 class="sub">앱으로 설치</h2>
+      <h2 class="sub" data-i18n="settings.install.title"></h2>
       <p class="hint" id="install-hint"></p>
       <div class="set-row">
-        <button id="install-btn" class="act" type="button" hidden>앱으로 설치</button>
-        <button id="move-btn" class="act ghost" type="button" hidden>홈 화면 앱으로 연결 옮기기</button>
+        <button id="install-btn" class="act" type="button" data-i18n="settings.install.button" hidden></button>
+        <button id="move-btn" class="act ghost" type="button" data-i18n="settings.install.move_button" hidden></button>
       </div>
     </div>
     <div id="bar-set">
-      <h2 class="sub">상단 바</h2>
-      <p class="hint">맨 위 바에 둘 항목과 순서를 골라요. 이 PC의 설정이라 폰·다른 기기 화면도 같이 바뀌어요. ☰를 숨겨도 Ctrl+B로 프로젝트 목록을 열 수 있어요.</p>
+      <h2 class="sub" data-i18n="settings.bar.title"></h2>
+      <p class="hint" data-i18n="settings.bar.hint"></p>
       <div id="bar-items"></div>
-      <div class="set-row"><button id="bar-reset" class="act ghost" type="button">기본값으로</button></div>
-      <h2 class="sub">내 버튼</h2>
-      <p class="hint">버튼 폴더에 스크립트(.ps1 .cmd .bat .py .js)를 넣으면 상단 바에 그 버튼이 생겨요. 누르면 이 PC에서 실행되고, 지금 보던 탭에 입력하거나 새 탭을 열 수도 있어요. 쓰는 법은 폴더 안 README.txt에 있어요.</p>
-      <button id="buttons-folder" class="act ghost" type="button">버튼 폴더 열기</button>
+      <div class="set-row"><button id="bar-reset" class="act ghost" type="button" data-i18n="settings.bar.reset_button"></button></div>
+      <h2 class="sub" data-i18n="settings.buttons.title"></h2>
+      <p class="hint" data-i18n="settings.buttons.hint"></p>
+      <button id="buttons-folder" class="act ghost" type="button" data-i18n="settings.buttons.folder_button"></button>
     </div>
   </section>
 
+  <section id="shortcuts" class="pane" hidden>
+    <h2 data-i18n="settings.shortcuts.title"></h2>
+    <p class="hint" id="keys-hint" data-i18n="settings.shortcuts.hint"></p>
+    <p class="hint" id="keys-ro" data-i18n="settings.shortcuts.readonly_hint" hidden></p>
+    <div id="key-rows"></div>
+    <div class="set-row"><button id="keys-reset" class="act ghost" type="button" data-i18n="settings.shortcuts.reset_button"></button></div>
+  </section>
+
   <section id="notify" class="pane" hidden>
-    <h2>알림</h2>
-    <p class="hint">Claude 작업이 끝나면 앱 안에 알림이 떠요. 다른 창을 보고 있을 때도 알 수 있게 윈도우 알림을 같이 띄울 수 있어요.</p>
-    <div class="set-row"><label class="sw"><input type="checkbox" id="notify-os"><span></span></label><label for="notify-os">윈도우 알림도 띄우기<span class="hint">이 창을 보고 있지 않을 때 Claude가 작업을 끝내거나 선택을 기다리면 윈도우 알림으로 알려 줘요. 알림을 누르면 그 탭으로 가요.</span></label></div>
-    <div class="set-row"><button id="notify-test" class="act ghost" type="button">알림 시험해 보기</button></div>
-    <p class="hint">알림이 안 보이면 Windows 설정 › 시스템 › 알림에서 DeskDoc 알림과 방해 금지가 꺼져 있는지 확인해 주세요.</p>
+    <h2 data-i18n="settings.notify.title"></h2>
+    <p class="hint" data-i18n="settings.notify.hint"></p>
+    <div class="set-row"><label class="sw"><input type="checkbox" id="notify-os"><span></span></label><label for="notify-os"><span data-i18n="settings.notify.os_label"></span><span class="hint" data-i18n="settings.notify.os_hint"></span></label></div>
+    <div class="set-row"><button id="notify-test" class="act ghost" type="button" data-i18n="settings.notify.test_button"></button></div>
+    <p class="hint" data-i18n="settings.notify.help_hint"></p>
   </section>
 
   <section id="remote" class="pane" hidden>
-    <h2>어디서나 접속 (P2P)</h2>
-    <p class="hint">폰·다른 PC로 QR을 찍으면 짝이 맺어져요. 이후엔 어느 네트워크에서든 <b id="web-url"></b> 을 열면 이 PC에 바로 연결돼요. 데이터는 기기끼리 암호화된 채로 오가요(바로 닿지 못할 때만 아래 릴레이를 거쳐요).</p>
-    <button id="pair-btn" class="act">새 기기 연결 QR</button>
+    <h2 data-i18n="remote.p2p.title"></h2>
+    <p class="hint"><span data-i18n="remote.p2p.hint_before_url"></span><b id="web-url"></b><span data-i18n="remote.p2p.hint_after_url"></span></p>
+    <button id="pair-btn" class="act" data-i18n="remote.pair.button"></button>
     <div id="pair-box" hidden>
       <div id="pair-qr"></div>
       <p class="hint" id="pair-ttl"></p>
@@ -198,51 +214,51 @@
     <div id="paired"></div>
     <p class="hint" id="peers"></p>
 
-    <h2 class="sub">릴레이 (TURN)</h2>
-    <p class="hint">폰이 LTE·5G에 있으면 통신사 네트워크 때문에 이 PC에 바로 닿지 못할 때가 많아요. 그럴 때만 Cloudflare 릴레이를 거쳐 연결해요. 내용은 기기끼리 암호화된 채로 지나가서 릴레이도 볼 수 없어요. Cloudflare 대시보드 › Realtime › TURN에서 만든 키를 넣어 주세요. 키는 이 PC에만 저장돼요.</p>
+    <h2 class="sub" data-i18n="remote.turn.title"></h2>
+    <p class="hint" data-i18n="remote.turn.hint"></p>
     <p class="hint" id="turn-state"></p>
     <form id="turn-form" autocomplete="off">
-      <input id="turn-id" placeholder="TURN 키 ID" spellcheck="false">
-      <input id="turn-token" type="password" placeholder="API 토큰" spellcheck="false">
+      <input id="turn-id" data-i18n-ph="remote.turn.id_ph" spellcheck="false">
+      <input id="turn-token" type="password" data-i18n-ph="remote.turn.token_ph" spellcheck="false">
       <div class="set-row">
-        <button class="act" type="submit" id="turn-save">저장</button>
-        <button class="act ghost" type="button" id="turn-clear" hidden>지우기</button>
+        <button class="act" type="submit" id="turn-save" data-i18n="remote.turn.save_button"></button>
+        <button class="act ghost" type="button" id="turn-clear" data-i18n="remote.turn.clear_button" hidden></button>
       </div>
     </form>
 
-    <h2 class="sub">같은 Wi-Fi (LAN)</h2>
-    <label class="switch"><input type="checkbox" id="remote-on"> 같은 네트워크에서 주소로 접속 허용</label>
+    <h2 class="sub" data-i18n="remote.lan.title"></h2>
+    <label class="switch"><input type="checkbox" id="remote-on"> <span data-i18n="remote.lan.allow_label"></span></label>
     <div id="remote-urls"></div>
-    <p class="hint">주소에 든 토큰이 비밀번호 역할을 하니 남에게 보여 주지 마세요.</p>
+    <p class="hint" data-i18n="remote.lan.token_hint"></p>
   </section>
 
   <!-- skills = Claude Code plugins; account (user scope) or one project (local scope, just me) -->
   <section id="skills" class="pane" hidden>
-    <h2>스킬</h2>
+    <h2 data-i18n="skills.title"></h2>
     <div class="sk-scope">
-      <button type="button" data-scope="user">계정 공통</button>
-      <button type="button" data-scope="local">프로젝트</button>
-      <select id="sk-proj" title="프로젝트 폴더"></select>
+      <button type="button" data-scope="user" data-i18n="skills.scope_user.label"></button>
+      <button type="button" data-scope="local" data-i18n="skills.scope_local.label"></button>
+      <select id="sk-proj" data-i18n-title="skills.project.tip"></select>
     </div>
     <p class="hint" id="sk-hint"></p>
     <div id="sk-market"></div>
-    <div id="sk-list"><div class="side-empty">불러오는 중…</div></div>
-    <h3 class="sk-sub">스킬 찾기</h3>
-    <input id="sk-q" type="search" placeholder="이름·설명·만든 사람으로 검색" autocomplete="off" spellcheck="false">
+    <div id="sk-list"><div class="side-empty" data-i18n="skills.loading.text"></div></div>
+    <h3 class="sk-sub" data-i18n="skills.search.title"></h3>
+    <input id="sk-q" type="search" data-i18n-ph="skills.search.ph" autocomplete="off" spellcheck="false">
     <div id="sk-cats"></div>
     <div id="sk-results"></div>
     <details id="sk-more">
-      <summary>다른 스킬 저장소 추가</summary>
+      <summary data-i18n="skills.add_repo.summary"></summary>
       <form id="sk-add" autocomplete="off">
         <input id="sk-repo" placeholder="GitHub owner/repo" spellcheck="false">
-        <button class="act" type="submit">추가</button>
+        <button class="act" type="submit" data-i18n="skills.add_repo.button"></button>
       </form>
     </details>
-    <p class="hint">바뀐 설정은 새로 여는 Claude 대화부터 적용돼요.</p>
+    <p class="hint" data-i18n="skills.apply_hint"></p>
   </section>
 
   <section id="update" class="pane" hidden>
-    <h2 id="upd-title">업데이트</h2>
+    <h2 id="upd-title" data-i18n="update.title"></h2>
     <p id="upd-ver"></p>
     <ul id="upd-notes"></ul>
     <div id="upd-bar" hidden><div></div></div>
@@ -250,9 +266,9 @@
     <p class="hint" id="upd-error" hidden></p>
     <div id="upd-actions"></div>
     <div id="upd-mode" hidden>
-      <h3>업데이트할 때</h3>
-      <div class="set-row"><input type="radio" name="upd-mode" id="upd-mode-wait" value="wait"><label for="upd-mode-wait">작업이 끝나면 다시 시작<span class="hint">작업 중인 대화가 모두 끝날 때까지 기다렸다가 설치해요. 열린 탭은 닫히고, 대화는 사이드바에서 다시 열 수 있어요.</span></label></div>
-      <div class="set-row"><input type="radio" name="upd-mode" id="upd-mode-resume" value="resume"><label for="upd-mode-resume">바로 다시 시작하고 탭 이어 열기<span class="hint">받는 대로 설치하고, 다시 켜지면 열려 있던 탭을 그대로 열어요. Claude 탭은 하던 대화를 이어 가요. 작업 중이던 응답은 끊기니 다시 열린 뒤 이어서 말해 주세요.</span></label></div>
+      <h3 data-i18n="settings.update.when"></h3>
+      <div class="set-row"><input type="radio" name="upd-mode" id="upd-mode-wait" value="wait"><label for="upd-mode-wait"><span data-i18n="update.mode_wait.label"></span><span class="hint" data-i18n="update.mode_wait.hint"></span></label></div>
+      <div class="set-row"><input type="radio" name="upd-mode" id="upd-mode-resume" value="resume"><label for="upd-mode-resume"><span data-i18n="update.mode_resume.label"></span><span class="hint" data-i18n="update.mode_resume.hint"></span></label></div>
     </div>
   </section>
 
@@ -268,9 +284,12 @@
   <script src="p2p.js"></script>
   <!-- The web client, in order: classic scripts sharing one global scope (no modules, no bundler).
        Code that runs while a file loads may only use what earlier files define. -->
+  <script src="js/strings.js"></script>
+  <script src="js/i18n.js"></script>
   <script src="js/app.js"></script>
   <script src="js/sidebar.js"></script>
   <script src="js/sessions.js"></script>
+  <script src="js/keys.js"></script>
   <script src="js/settings.js"></script>
   <script src="js/connect.js"></script>
   <script src="js/compose.js"></script>

@@ -34,7 +34,7 @@ function curSuggest() {
 }
 function renderSuggest(has) {
   const sug = curSuggest();
-  ta.placeholder = sug || '메시지 입력'; // no key hint: Claude Code shows the bare suggestion too
+  ta.placeholder = sug || txt('compose.placeholder'); // no key hint: Claude Code shows the bare suggestion too
   ta.classList.toggle('suggest', !!sug);
   const chip = $('#suggest-chip');
   chip.hidden = !touch || !sug || has;
@@ -53,12 +53,12 @@ $('#suggest-chip').onclick = takeSuggest;
 function renderQueue() {
   const list = (active !== null && queued.get(active)) || [];
   const s = active !== null && sessions.get(active);
-  const label = s && notReady(s) ? '준비되면 전송' : s && s.info.asking && !s.info.busy ? '답하면 전송' : '끝나면 전송';
+  const label = s && notReady(s) ? txt('compose.hold.ready') : s && s.info.asking && !s.info.busy ? txt('compose.hold.answer') : txt('compose.hold.done');
   $('#queue-list').replaceChildren(...list.map((q) => {
     const row = el('div', 'qi');
     const x = el('button', '', '×');
     x.type = 'button';
-    x.title = '보내지 않기';
+    x.title = txt('compose.queue.cancel');
     x.onclick = () => {
       const l = queued.get(active) || [];
       l.splice(l.indexOf(q), 1);
@@ -81,7 +81,7 @@ function holdCompose() {
   const wait = s.info.claude && s.info.alive && (s.info.busy || s.info.asking || notReady(s)
     || queued.get(s.id)?.length || Date.now() - (s.sentAt || 0) < 3000);
   if (!wait) { sendCompose(); return; }
-  if (atts.some((a) => !a.path)) { toast('이미지를 다 올린 뒤에 눌러 주세요', 2000); return; }
+  if (atts.some((a) => !a.path)) { toast(txt('compose.wait_upload'), 2000); return; }
   if (!queued.has(s.id)) queued.set(s.id, []);
   queued.get(s.id).push({ text, atts });
   atts = [];
@@ -114,7 +114,7 @@ const userCount = (s) => (s.chat || []).reduce((n, it) => n + (it.k === 'user'),
 function addPending(s, text, images) {
   // Slash commands and menu answers never become a user message in the transcript.
   // Only while the transcript is loaded: the count needs a starting point.
-  if (!s.info.claude || !s.chat || s.info.menu || text.trim().startsWith('/')) return;
+  if (!s.info.claude || !s.chat || s.info.asking || text.trim().startsWith('/')) return;
   if (!s.pending?.length) { s.pending = []; s.pendBase = userCount(s); }
   s.pending.push({ text: text.trim(), images, at: Date.now() });
   if (s.id === active && chatShown()) renderChat();
@@ -147,14 +147,14 @@ $('#queue-btn').onclick = holdCompose;
 // ---- AI model / effort picker (in the input box) ----
 // Saved per device; every new Claude tab starts with `--model` / `--effort`. The active Claude tab,
 // if it's idle, switches right away via `/model` · `/effort` (typing into a busy one would interrupt).
-const MODELS = [['opus', 'Opus 5.5'], ['fable', 'Fable 5.1'], ['sonnet', 'Sonnet 5.5'], ['haiku', 'Haiku 5.5', '빠름']];
+const MODELS = [['opus', 'Opus 5.5'], ['fable', 'Fable 5.1'], ['sonnet', 'Sonnet 5.5'], ['haiku', 'Haiku 5.5', txt('compose.effort.fast')]];
 // Never picked (or an old saved '' = "default"): start with Opus.
 function curModel() {
   const m = load('zd-model');
   return MODELS.some((x) => x[0] === m) ? m : 'opus';
 }
-const EFFORTS = [['low', 'Low', '빠름'], ['medium', 'Medium', ''], ['high', 'High', ''],
-  ['xhigh', 'XHigh', ''], ['max', 'Max', '가장 꼼꼼']];
+const EFFORTS = [['low', 'Low', txt('compose.effort.fast')], ['medium', 'Medium', ''], ['high', 'High', ''],
+  ['xhigh', 'XHigh', ''], ['max', 'Max', txt('compose.effort.thorough')]];
 function curEffort() {
   const e = load('zd-effort');
   return EFFORTS.some((x) => x[0] === e) ? e : 'high';
@@ -215,11 +215,11 @@ modelMenu.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.stopP
 // An older desktop app sends no `mode`: the picker stays hidden.
 // [label, note, icon path]
 var MODES = {
-  default: ['Default', '편집·명령 전에 물어봐요', 'M8 1.8l5 1.8v4c0 3.1-2.1 5.4-5 6.6-2.9-1.2-5-3.5-5-6.6v-4z'],
-  acceptEdits: ['Accept edits', '파일 편집은 묻지 않아요', 'M10.8 2.7l2.5 2.5L6 12.5l-3.2.7.7-3.2zM9.3 4.2l2.5 2.5'],
-  plan: ['Plan', '읽기만 하고 계획부터 세워요', 'M6 4.5h7M6 8h7M6 11.5h7M3 4.5h.01M3 8h.01M3 11.5h.01'],
-  auto: ['Auto', '안전한 작업은 알아서 해요', 'M9 1.5L3.5 9H8l-1 5.5L12.5 7H8z'],
-  bypassPermissions: ['Bypass', '아무것도 묻지 않아요', 'M8 2l6.5 11.5h-13zM8 6.5v3M8 11.5h.01'],
+  default: ['Default', txt('compose.mode.default'), 'M8 1.8l5 1.8v4c0 3.1-2.1 5.4-5 6.6-2.9-1.2-5-3.5-5-6.6v-4z'],
+  acceptEdits: ['Accept edits', txt('compose.mode.accept_edits'), 'M10.8 2.7l2.5 2.5L6 12.5l-3.2.7.7-3.2zM9.3 4.2l2.5 2.5'],
+  plan: ['Plan', txt('compose.mode.plan'), 'M6 4.5h7M6 8h7M6 11.5h7M3 4.5h.01M3 8h.01M3 11.5h.01'],
+  auto: ['Auto', txt('compose.mode.auto'), 'M9 1.5L3.5 9H8l-1 5.5L12.5 7H8z'],
+  bypassPermissions: ['Bypass', txt('compose.mode.bypass'), 'M8 2l6.5 11.5h-13zM8 6.5v3M8 11.5h.01'],
 };
 var MODE_ICON_OTHER = 'M8 2.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11z';
 // `var`: updateSend() may run renderMode() before this part of the file has run.
@@ -242,7 +242,7 @@ function renderMode() {
   const key = JSON.stringify([mode, list]);
   if (key === modeKey) return;
   modeKey = key;
-  modeMenu().replaceChildren(el('div', 'mm-h', '권한 모드 · Shift+Tab'), ...list.map((v) => {
+  modeMenu().replaceChildren(el('div', 'mm-h', txt('compose.mode.title')), ...list.map((v) => {
     const [label, note, icon] = MODES[v] || [v, ''];
     const b = el('button', 'mm-i');
     b.type = 'button';
@@ -296,13 +296,13 @@ function renderCtxMenu() {
   const info = $('#ctx-info'), bar = el('i');
   bar.style.setProperty('--p', cp + '%');
   info.className = warnClass(cp).trim();
-  info.title = `${ctxTokens(ctx.used, ctx.max)} 토큰`;
+  info.title = txt('compose.ctx.tokens', { n: ctxTokens(ctx.used, ctx.max) });
   info.replaceChildren(bar, el('span', '', cp + '%'));
   // Same rules as the desktop app's (api::compact), only to explain the greyed-out button.
-  const why = compactWait && compactWait.id === s.id ? '요약을 부탁하는 중…'
-    : !s.info.alive ? '탭이 실행 중이 아니에요'
-    : s.info.asking ? 'Claude가 선택을 기다리는 중이에요. 먼저 답해 주세요'
-    : s.info.busy ? 'Claude가 작업 중이에요. 끝난 뒤에 요약할 수 있어요'
+  const why = compactWait && compactWait.id === s.id ? txt('compose.compact.waiting')
+    : !s.info.alive ? txt('compose.compact.dead')
+    : s.info.asking ? txt('compose.compact.asking')
+    : s.info.busy ? txt('compose.compact.busy')
     : '';
   $('#compact-btn').disabled = !!why;
   $('#compact-why').hidden = !why;
@@ -326,7 +326,7 @@ function onCompactDone(m) {
   const ok = compactWait && m.t === 'compact_done' && !m.error;
   compactWait = null;
   if (m.error) toast(m.error, 5000);
-  if (ok) { showCtxMenu(false); toast('대화를 요약하고 있어요'); focusInput(); }
+  if (ok) { showCtxMenu(false); toast(txt('compose.compact.started')); focusInput(); }
   else renderCtxMenu();
 }
 $('#chat-ctx').onclick = () => showCtxMenu(ctxMenu().hidden);

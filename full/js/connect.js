@@ -10,7 +10,7 @@ function showEmpty(text) {
 function connect() {
   if (p2pMode) {
     if (!desk) { showUnpaired(); return; }
-    if (!sessions.size) showEmpty('데스크탑에 연결하는 중…');
+    if (!sessions.size) showEmpty(txt('connect.connecting'));
     // On the hosted page the loader fetched this screen over a connection: take that one over (once).
     ws = (window.ZDBOOT && ZDBOOT.take()) || ZDP2P.connect(desk.pub, desk.relays);
     ws.onstatus = (s) => { if (!sessions.size) showEmpty(s); };
@@ -23,7 +23,7 @@ function connect() {
   ws.onopen = () => {
     retry = p2pMode ? 2000 : 500;
     showConn(true);
-    if (p2pMode) toast('데스크탑에 연결됐어요', 2000);
+    if (p2pMode) toast(txt('connect.connected'), 2000);
     // Re-attach everything we already show: output during the gap is in the server's scrollback.
     for (const s of sessions.values()) send({ t: 'attach', id: s.id });
     if (!document.body.classList.contains('side-hidden')) send({ t: 'projects' });
@@ -45,7 +45,8 @@ function connect() {
     else if (m.t === 'folder') onFolder(m);
     else if (m.t === 'update') onUpdate(m);
     else if (m.t === 'usage') onUsage(m);
-    else if (m.t === 'prefs') onPrefs(m);
+    else if (m.t === 'prefs') { onPrefs(m); if (Array.isArray(m.keys)) onKeys(m.keys); }
+    else if (m.t === 'key_done') onKeyDone(m);
     else if (m.t === 'show') onShow(m);
     else if (m.t === 'button_done') onButtonDone(m);
     else if (m.t === 'conv_done') onConvDone(m);
@@ -69,12 +70,12 @@ function connect() {
     // does know, so match the unknown one's own name).
     else if (m.t === 'error' && /variant `complete`/.test(m.msg)) { acOff = true; acClose(); }
     else if (m.t === 'error' && /variant `watch`/.test(m.msg)) { chatUnsupported = true; syncChat(true); }
-    else if (m.t === 'error' && /variant `(conv_rename|conv_delete|proj_move)`/.test(m.msg)) { toast('데스크탑 앱을 업데이트하면 쓸 수 있어요'); send({ t: 'projects' }); }
-    else if (m.t === 'error' && /variant `compact`/.test(m.msg)) onCompactDone({ error: '데스크탑 앱을 업데이트하면 쓸 수 있어요' });
+    else if (m.t === 'error' && /variant `(conv_rename|conv_delete|proj_move)`/.test(m.msg)) { toast(txt('connect.old_app.use')); send({ t: 'projects' }); }
+    else if (m.t === 'error' && /variant `compact`/.test(m.msg)) onCompactDone({ error: txt('connect.old_app.use') });
     else if (m.t === 'error' && /variant `(file|reveal)`/.test(m.msg)) {
-      for (const [rid, r] of fileReqs) { fileReqs.delete(rid); clearTimeout(r.timer); r.reject(new Error('데스크탑 앱을 업데이트하면 볼 수 있어요')); }
+      for (const [rid, r] of fileReqs) { fileReqs.delete(rid); clearTimeout(r.timer); r.reject(new Error(txt('connect.old_app.view'))); }
     }
-    else if (m.t === 'error') toast(m.msg);
+    else if (m.t === 'error') toast(errText(m));
   };
   ws.onclose = (ev) => {
     showConn(false);
@@ -86,7 +87,7 @@ function connect() {
       return;
     }
     if (p2pMode && ev && ev.reason && ev.reason !== 'channel closed') {
-      toast(`${ev.reason} · ${Math.round(retry / 1000)}초 뒤 다시 시도`, retry);
+      toast(txt('connect.retry', { reason: ev.reason, n: Math.round(retry / 1000) }), retry);
     }
     setTimeout(connect, retry);
     // P2P retries cost relay round-trips: back off further.
@@ -119,18 +120,18 @@ async function pairWith(p) {
   const k = p.get('k');
   const relays = (p.get('r') || '').split(',').filter(Boolean);
   const hex = /^[0-9a-f]{64}$/;
-  if (!d || !hex.test(d) || !(s || k)) return '링크가 올바르지 않아요';
+  if (!d || !hex.test(d) || !(s || k)) return txt('connect.bad_link');
   if (k) {
     // An iPhone home-screen app doesn't share Safari's storage: take over the key Safari paired with.
-    if (!hex.test(k)) return '링크가 올바르지 않아요';
+    if (!hex.test(k)) return txt('connect.bad_link');
     store('zd-sk', k);
     desk = { pub: d, relays };
     store('zd-desk', JSON.stringify(desk));
     return '';
   }
-  showEmpty('데스크탑과 짝을 맺는 중…');
+  showEmpty(txt('connect.pairing'));
   try {
-    if (!(await ZDP2P.pair(d, relays, s))) return 'QR이 만료됐거나 이미 사용됐어요. 데스크탑에서 새 QR을 만들어 주세요.';
+    if (!(await ZDP2P.pair(d, relays, s))) return txt('connect.qr_expired');
   } catch (e) {
     return e.message;
   }
@@ -140,8 +141,8 @@ async function pairWith(p) {
 }
 
 function pairedToast(moved) {
-  if (moved) toast('연결을 옮겼어요', 4000);
-  else toast(hosted && !standalone ? '짝 맺기 완료! [설정] → [화면]에서 앱으로 설치해 두면 편해요' : '짝 맺기 완료!', 5000);
+  if (moved) toast(txt('connect.moved'), 4000);
+  else toast(hosted && !standalone ? txt('connect.paired_install') : txt('connect.paired'), 5000);
 }
 
 /** Opened from the desktop's pairing QR, or from a move link. */
@@ -159,19 +160,19 @@ async function pairFromHash() {
  * opened that way, so it takes the link by paste.
  */
 function showUnpaired() {
-  const qrHelp = '데스크탑 앱의 [설정] → [리모트] → "새 기기 연결 QR"을 이 기기로 찍어 주세요';
+  const qrHelp = txt('connect.qr_help');
   if (!standalone) { showEmpty(pairError ? `${pairError}\n\n${qrHelp}` : qrHelp); return; }
   showEmpty('');
   const el = $('#terms .empty');
   const box = Object.assign(document.createElement('form'), { className: 'paste-pair' });
   const msg = Object.assign(document.createElement('p'), {
     textContent: iOS
-      ? 'Safari에서 짝을 맺었다면 Safari의 [설정] → [화면] → "홈 화면 앱으로 연결 옮기기"로 복사한 링크를 붙여넣어 주세요.\n처음이라면 데스크탑 QR을 카메라로 찍어 Safari에서 먼저 짝을 맺어 주세요.'
-      : '데스크탑 QR을 카메라로 찍거나, 복사한 연결 링크를 붙여넣어 주세요.',
+      ? txt('connect.paste.ios')
+      : txt('connect.paste.other'),
   });
   const err = Object.assign(document.createElement('p'), { className: 'paste-err', textContent: pairError });
-  const input = Object.assign(document.createElement('input'), { type: 'url', placeholder: 'https://… 링크 붙여넣기', autocomplete: 'off' });
-  const ok = Object.assign(document.createElement('button'), { type: 'submit', className: 'act', textContent: '연결' });
+  const input = Object.assign(document.createElement('input'), { type: 'url', placeholder: txt('connect.paste.ph'), autocomplete: 'off' });
+  const ok = Object.assign(document.createElement('button'), { type: 'submit', className: 'act', textContent: txt('connect.paste.submit') });
   box.append(msg, err, input, ok);
   el.append(box);
   box.onsubmit = async (e) => {
@@ -197,12 +198,12 @@ function renderInstall() {
   $('#install-btn').hidden = !installPrompt;
   $('#move-btn').hidden = !canMove;
   let hint;
-  if (standalone) hint = '지금 앱으로 실행 중이에요.';
-  else if (installPrompt) hint = '설치하면 홈 화면 아이콘으로 주소창 없이 앱처럼 열려요.';
+  if (standalone) hint = txt('connect.install.standalone');
+  else if (installPrompt) hint = txt('connect.install.prompt');
   else if (iOS) {
-    hint = 'Safari 아래쪽 공유 버튼 → [홈 화면에 추가]로 앱처럼 설치할 수 있어요.';
-    if (canMove) hint += ' iPhone에서는 설치한 앱이 Safari와 저장 공간을 따로 써서 처음엔 연결이 비어 있어요. 아래 버튼으로 연결 링크를 복사한 뒤, 홈 화면의 DeskDoc을 열어 붙여넣으세요. 이 링크는 이 기기의 열쇠라 남에게 보내면 안 돼요.';
-  } else hint = '브라우저 메뉴의 [앱 설치] 또는 [홈 화면에 추가]로 앱처럼 설치할 수 있어요.';
+    hint = txt('connect.install.ios');
+    if (canMove) hint += txt('connect.install.ios_move');
+  } else hint = txt('connect.install.other');
   $('#install-hint').textContent = hint;
 }
 renderInstall();
@@ -221,8 +222,8 @@ $('#move-btn').onclick = async () => {
   const link = `${location.origin}${location.pathname}#k=${sk}&d=${desk.pub}&r=${desk.relays.join(',')}`;
   try {
     await navigator.clipboard.writeText(link);
-    toast('연결 링크를 복사했어요. 홈 화면의 DeskDoc을 열고 붙여넣으세요', 6000);
+    toast(txt('connect.link_copied'), 6000);
   } catch {
-    prompt('이 링크를 복사해 주세요', link);
+    prompt(txt('connect.link_prompt'), link);
   }
 };

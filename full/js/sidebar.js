@@ -18,10 +18,10 @@ document.addEventListener('animationstart', (e) => {
 
 function ago(sec) {
   const d = Date.now() / 1000 - sec;
-  if (d < 60) return '방금';
-  if (d < 3600) return `${Math.floor(d / 60)}분`;
-  if (d < 86400) return `${Math.floor(d / 3600)}시간`;
-  if (d < 86400 * 30) return `${Math.floor(d / 86400)}일`;
+  if (d < 60) return txt('side.ago.now');
+  if (d < 3600) return txt('side.ago.m', { n: Math.floor(d / 60) });
+  if (d < 86400) return txt('side.ago.h', { n: Math.floor(d / 3600) });
+  if (d < 86400 * 30) return txt('side.ago.d', { n: Math.floor(d / 86400) });
   return new Date(sec * 1000).toLocaleDateString();
 }
 
@@ -42,23 +42,33 @@ const samePath = (a, b) => {
 let dragProj = null; // path being dragged; re-renders wait until the drag ends
 let renderPending = false;
 
+/** Where a conversation goes in its folder, as [group, time]: working (latest started first), then
+ *  the rest. The server lists in this order too (history::working_first); applied here as well so
+ *  a row moves the moment its tab starts or stops working. */
+function convRank(tab) {
+  if (!tab || !tab.info.alive) return [0, 0];
+  if (tab.info.working_since != null) return [1, tab.info.working_since];
+  if (tab.info.busy) return [1, tab.info.since]; // older desktop app: no working_since
+  return [0, 0];
+}
+
 function renderProjects() {
   // Not while a project is dragged or a name is being typed: re-rendering would drop either.
   if (dragProj !== null || renaming) { renderPending = true; return; }
   const box = $('#projects');
-  if (!projects.length) { box.replaceChildren(el('div', 'side-empty', 'Claude 대화 기록이 없어요. ＋로 폴더를 추가하세요.')); return; }
+  if (!projects.length) { box.replaceChildren(el('div', 'side-empty', txt('side.no_history'))); return; }
   // Plain shell tabs have no conversation to list; without the tab bar this is the way back to them.
   const shells = [...sessions.values()].filter((s) => !s.info.claude);
   const shellBox = [];
   if (shells.length) {
     const wrap = el('div', 'proj open');
-    wrap.append(el('div', 'proj-head', '셸'));
+    wrap.append(el('div', 'proj-head', txt('side.shell')));
     const list = el('div', 'proj-list');
     for (const s of shells) {
       const row = el('div', 'sess' + (s.id === active ? ' current' : ''));
       row.append(el('span', 'sdot'), el('span', 'stitle', s.osTitle || s.info.title));
       const x = el('button', 'icon', '×');
-      x.title = '셸 닫기';
+      x.title = txt('side.shell_close');
       x.onclick = (e) => { e.stopPropagation(); closeTab(s.id); };
       row.append(x);
       row.onclick = () => { activate(s.id); if (narrow()) toggleSide(false); };
@@ -74,7 +84,7 @@ function renderProjects() {
     const caret = el('span', 'caret', openProjects.has(p.path) ? '▾' : '▸');
     const name = el('span', 'pname', p.name);
     const add = el('button', 'icon new', '＋');
-    add.title = `${p.name} 에서 새 대화`;
+    add.title = txt('side.new_here', { name: p.name });
     add.onclick = (e) => { e.stopPropagation(); newTab(true, { cwd: p.path, title: p.name }); };
     // Blue badge = conversations in this folder that finished and you haven't opened yet (the rows' blue dots).
     // Only while collapsed: once open, the rows' own dots already say it.
@@ -82,7 +92,7 @@ function renderProjects() {
     head.append(caret, name);
     if (doneN && !openProjects.has(p.path)) {
       const badge = el('span', 'run-badge done', String(doneN));
-      badge.title = `작업 끝남 · 안 본 대화 ${doneN}개`;
+      badge.title = txt('side.done_badge', { n: doneN });
       head.append(badge);
     }
     head.append(add);
@@ -132,27 +142,33 @@ function renderProjects() {
     };
     const list = el('div', 'proj-list');
     const limit = showAll.has(p.path) ? p.sessions.length : 8;
-    for (const s of p.sessions.slice(0, limit)) {
-      // The tab running this conversation: as matched by the server, or one we opened with --resume
-      // (covers the moment before the next projects refresh).
-      const tab = (s.tab != null && sessions.get(s.tab))
-        || [...sessions.values()].find((t) => t.info.alive && t.info.resume === s.id);
+    // The tab running each conversation: as matched by the server, or one we opened with --resume
+    // (covers the moment before the next projects refresh).
+    const convs = p.sessions.map((s) => ({ s, tab: (s.tab != null && sessions.get(s.tab))
+      || [...sessions.values()].find((t) => t.info.alive && t.info.resume === s.id) }));
+    for (const c of convs) c.rank = convRank(c.tab);
+    convs.sort((a, b) => b.rank[0] - a.rank[0] || b.rank[1] - a.rank[1]); // stable: the rest keep the server's order
+    for (const { s, tab } of convs.slice(0, limit)) {
       const busy = tab && tab.info.busy;
       const done = !busy && tab && tab.done;
       const row = el('div', 'sess' + (tab && tab.id === active ? ' current' : '') + (busy ? ' busy' : ''));
       row.title = s.title;
       // Right slot: Claude's turning glyph (orange, no text) while working → a blue dot once it
-      // finishes (until opened) → last-modified time.
+      // finishes (until opened) → an orange ring while background commands (shells, monitors)
+      // outlive the turn → last-modified time.
       let when;
       if (done) when = el('span', 'done-dot');
       else if (busy) {
         when = el('span', 'sglyph');
-        when.title = '작업 중';
+        when.title = txt('side.working');
+      } else if (tab && tab.info.background) {
+        when = el('span', 'bg-ring');
+        when.title = bgText(tab.info);
       } else when = el('span', 'when', ago(s.mtime));
-      if (done) when.title = '작업 끝남 · 아직 안 봤어요';
+      if (done) when.title = txt('side.done_unseen');
       // "⋯" takes the right slot's place on hover and opens the conversation menu (so does right-click).
       const more = el('button', 'icon more', '⋯');
-      more.title = '더 보기';
+      more.title = txt('side.more');
       more.onclick = (e) => { e.stopPropagation(); openConvMenu(row, s, more); };
       row.oncontextmenu = (e) => { e.preventDefault(); openConvMenu(row, s, null, e); };
       row.dataset.conv = s.id;
@@ -166,15 +182,15 @@ function renderProjects() {
       list.append(row);
     }
     if (p.sessions.length > limit) {
-      const more = el('div', 'sess-more', `이전 대화 ${p.sessions.length - limit}개 더 보기`);
+      const more = el('div', 'sess-more', txt('side.older', { n: p.sessions.length - limit }));
       more.onclick = () => { showAll.add(p.path); renderProjects(); };
       list.append(more);
     } else if (showAll.has(p.path) && p.sessions.length > 8) {
-      const less = el('div', 'sess-more', '접기');
+      const less = el('div', 'sess-more', txt('side.fold'));
       less.onclick = () => { showAll.delete(p.path); renderProjects(); };
       list.append(less);
     }
-    if (!p.sessions.length) list.append(el('div', 'side-empty', '아직 대화가 없어요'));
+    if (!p.sessions.length) list.append(el('div', 'side-empty', txt('side.no_convs')));
     wrap.append(head, list);
     return wrap;
   }));
@@ -209,9 +225,9 @@ function openConvMenu(row, c, anchor, ev) {
   convMenu.row = row;
   row.classList.add('menu-open');
   m.replaceChildren(
-    menuItem('rename', '이름 바꾸기', '', () => { closeConvMenu(); startRename(row, c); }),
+    menuItem('rename', txt('side.rename'), '', () => { closeConvMenu(); startRename(row, c); }),
     el('div', 'cm-sep'),
-    menuItem('delete', '삭제', 'danger', () => confirmDelete(c)),
+    menuItem('delete', txt('side.delete'), 'danger', () => confirmDelete(c)),
   );
   m.hidden = false;
   const r = anchor ? anchor.getBoundingClientRect() : { left: ev.clientX, right: ev.clientX, top: ev.clientY, bottom: ev.clientY };
@@ -237,11 +253,11 @@ addEventListener('resize', closeConvMenu);
 function confirmDelete(c) {
   const m = convMenu.el;
   const q = el('div', 'cm-q');
-  q.append(el('b', '', '이 대화를 삭제할까요?'), el('span', '', c.tab != null ? '열린 탭도 닫히고, 되돌릴 수 없어요.' : '되돌릴 수 없어요.'));
+  q.append(el('b', '', txt('side.delete_q')), el('span', '', c.tab != null ? txt('side.delete_note_tab') : txt('side.delete_note')));
   const row = el('div', 'cm-btns');
-  const no = el('button', 'act ghost', '취소');
+  const no = el('button', 'act ghost', txt('side.cancel'));
   no.onclick = (e) => { e.stopPropagation(); closeConvMenu(); };
-  const yes = el('button', 'act danger', '삭제');
+  const yes = el('button', 'act danger', txt('side.delete'));
   yes.onclick = (e) => {
     e.stopPropagation();
     convMenu.row?.classList.add('removing');
@@ -289,7 +305,7 @@ function startRename(row, c) {
 
 function onConvDone(m) {
   if (m.error) toast(m.error, 6000);
-  else if (m.op === 'delete') toast('대화를 삭제했어요', 2500);
+  else if (m.op === 'delete') toast(txt('side.deleted'), 2500);
   send({ t: 'projects' });
 }
 
@@ -310,24 +326,26 @@ $('#refresh-projects').onclick = () => send({ t: 'projects' });
 $('#add-folder').onclick = () => send({ t: 'pickfolder' });
 function onFolder(m) {
   if (m.remote) {
-    const p = prompt('추가할 폴더 경로 (예: X:\\Github\\내프로젝트)');
+    const p = prompt(txt('side.folder_prompt'));
     if (p) { send({ t: 'addfolder', path: p }); setTimeout(() => send({ t: 'projects' }), 300); }
   } else if (m.path) send({ t: 'projects' });
 }
 setInterval(() => { if (!document.body.classList.contains('side-hidden')) send({ t: 'projects' }); }, 60000);
 
 /** The app-level action for a key event, or null if the key belongs to the terminal. */
+/** The keys come from the server's shortcut table (keys.js); `quote` is chat-live.js's. */
 function shortcutFor(e) {
-  if (e.ctrlKey && e.shiftKey && e.code === 'KeyT') return () => newTab(true);
-  if (e.ctrlKey && !e.shiftKey && e.code === 'KeyB') return () => toggleSide();
-  if (e.ctrlKey && e.shiftKey && e.code === 'KeyY') return () => setChatPref(!chatPref);
-  if (e.ctrlKey && e.shiftKey && e.code === 'KeyW') return () => { if (active !== null) closeTab(active); };
-  if (e.ctrlKey && e.key === 'Tab') return () => {
+  const a = keyAction(e);
+  if (a === 'new_tab') return () => newTab(true);
+  if (a === 'toggle_side') return () => toggleSide();
+  if (a === 'toggle_chat') return () => setChatPref(!chatPref);
+  if (a === 'close_tab') return () => { if (active !== null) closeTab(active); };
+  if (a === 'next_tab' || a === 'prev_tab') return () => {
     const ids = [...sessions.keys()];
-    if (ids.length) activate(ids[(ids.indexOf(active) + (e.shiftKey ? ids.length - 1 : 1)) % ids.length]);
+    if (ids.length) activate(ids[(ids.indexOf(active) + (a === 'prev_tab' ? ids.length - 1 : 1)) % ids.length]);
   };
-  if (e.ctrlKey && (e.key === '=' || e.key === '+' || e.key === '-' || e.key === '0')) return () => {
-    fontSize = e.key === '0' ? (touch ? 12 : 14) : Math.min(28, Math.max(8, fontSize + (e.key === '-' ? -1 : 1)));
+  if (a === 'font_bigger' || a === 'font_smaller' || a === 'font_reset') return () => {
+    fontSize = a === 'font_reset' ? (touch ? 12 : 14) : Math.min(28, Math.max(8, fontSize + (a === 'font_smaller' ? -1 : 1)));
     store('zd-font', String(fontSize));
     for (const s of sessions.values()) s.term.options.fontSize = fontSize;
     if (follow) fitActive();

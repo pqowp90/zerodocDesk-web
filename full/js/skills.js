@@ -11,11 +11,9 @@ let skBusy = null; // id (or repo) of the change in flight
 let skQTimer = 0;
 let skCat = ''; // catalog category filter, '' = all
 
-const SK_CATS = {
-  development: '개발', productivity: '생산성', database: '데이터베이스', monitoring: '모니터링',
-  security: '보안', deployment: '배포', design: '디자인', automation: '자동화', learning: '학습',
-  location: '위치', testing: '테스트', math: '수학', migration: '마이그레이션',
-};
+// Category ids the text table knows (skills.cat.<id>); others show their own name.
+const SK_CATS = new Set(['development', 'productivity', 'database', 'monitoring', 'security', 'deployment', 'design', 'automation', 'learning', 'location', 'testing', 'math', 'migration']);
+function skCatName(id) { return SK_CATS.has(id) ? txt('skills.cat.' + id) : id; }
 
 function skFolders() {
   const out = [];
@@ -53,14 +51,14 @@ function renderSkillScope() {
     return o;
   }));
   $('#sk-hint').textContent = skScope === 'user'
-    ? '모든 프로젝트에 적용돼요 (~/.claude/settings.json).'
-    : skCwd ? `이 프로젝트에서 나에게만 적용돼요 (.claude/settings.local.json · git에 안 올라감).` : '프로젝트 폴더가 없어요. 사이드바에서 ＋로 폴더를 추가하세요.';
+    ? txt('skills.hint.user')
+    : skCwd ? txt('skills.hint.local') : txt('skills.hint.no_folder');
 }
 
 function skApply(op, id, key = id) {
-  if (skBusy) { toast('앞의 작업이 끝나면 다시 눌러 주세요', 2000); return; }
+  if (skBusy) { toast(txt('skills.busy'), 2000); return; }
   const scope = skScope === 'local' ? 'local' : 'user';
-  if (scope === 'local' && !skCwd && op !== 'market_add') { toast('프로젝트 폴더를 골라 주세요'); return; }
+  if (scope === 'local' && !skCwd && op !== 'market_add') { toast(txt('skills.pick_folder')); return; }
   skBusy = key;
   send({ t: 'skill', op, id, scope, cwd: skCwd });
   renderSkills();
@@ -88,13 +86,13 @@ function skRow(name, market, desc, installs = 0, author = '') {
   title.append(el('span', 'sk-mk', market));
   if (author) {
     const a = el('button', 'sk-mk sk-author', `@${author}`);
-    a.title = `${author}의 스킬만 보기`;
+    a.title = txt('skills.author_only', { author });
     a.onclick = () => { $('#sk-q').value = `@${author}`; skRequest(); };
     title.append(a);
   }
   if (installs > 0) {
     const n = el('span', 'sk-mk', `↓ ${skCount(installs)}`);
-    n.title = `${installs.toLocaleString()}명이 설치`;
+    n.title = txt('skills.installs', { n: installs.toLocaleString() });
     title.append(n);
   }
   main.append(title);
@@ -112,8 +110,8 @@ function renderSkills() {
   card.replaceChildren();
   if (!m.zerodoc) {
     const c = el('div', 'sk-card');
-    c.append(el('span', '', 'zerodoc 기본 스킬 저장소를 연결하면 화면 캡처 같은 스킬을 바로 켤 수 있어요.'));
-    const b = el('button', 'act', skBusy === ZERODOC_REPO ? '연결 중…' : '연결');
+    c.append(el('span', '', txt('skills.connect.text')));
+    const b = el('button', 'act', skBusy === ZERODOC_REPO ? txt('skills.connect.busy') : txt('skills.connect.btn'));
     b.disabled = !!skBusy;
     b.onclick = () => skApply('market_add', ZERODOC_REPO);
     c.append(b);
@@ -121,7 +119,7 @@ function renderSkills() {
   }
 
   const list = $('#sk-list');
-  if (!m.items.length) list.replaceChildren(el('div', 'side-empty', '설치된 스킬이 없어요. 아래에서 찾아 켜 보세요.'));
+  if (!m.items.length) list.replaceChildren(el('div', 'side-empty', txt('skills.empty')));
   else list.replaceChildren(...m.items.map((it) => {
     const { row, main } = skRow(it.name, it.market, it.description);
     if (skBusy === it.id) row.classList.add('busy');
@@ -129,19 +127,19 @@ function renderSkills() {
     const note = el('div', 'sk-note');
     if (local) {
       if (it.local !== null) {
-        note.append(el('span', '', it.local ? '이 프로젝트에서 켬' : '이 프로젝트에서 끔'));
-        const r = el('button', '', '↺ 계정 설정 따르기');
-        r.title = `계정 공통: ${it.user ? '켬' : '끔'}`;
+        note.append(el('span', '', it.local ? txt('skills.note.local_on') : txt('skills.note.local_off')));
+        const r = el('button', '', txt('skills.note.follow_account'));
+        r.title = txt('skills.note.account_state', { state: it.user ? txt('skills.state.on') : txt('skills.state.off') });
         r.onclick = () => skApply('reset', it.id);
         note.append(r);
-      } else if (it.project !== null) note.append(el('span', '', `팀 설정(.claude/settings.json): ${it.project ? '켬' : '끔'}`));
-      else note.append(el('span', '', it.user ? '계정 공통으로 켜짐' : '계정 공통에선 꺼져 있음'));
+      } else if (it.project !== null) note.append(el('span', '', txt('skills.note.team', { state: it.project ? txt('skills.state.on') : txt('skills.state.off') })));
+      else note.append(el('span', '', it.user ? txt('skills.note.account_on') : txt('skills.note.account_off')));
     } else {
       if (it.scopes.includes('user')) {
-        const del = el('button', '', '삭제');
-        del.onclick = () => { if (confirm(`${it.name} 스킬을 계정에서 삭제할까요?`)) skApply('uninstall', it.id); };
+        const del = el('button', '', txt('skills.delete'));
+        del.onclick = () => { if (confirm(txt('skills.delete_confirm', { name: it.name }))) skApply('uninstall', it.id); };
         note.append(del);
-      } else if (it.scopes.length) note.append(el('span', '', '일부 프로젝트에만 설치됨'));
+      } else if (it.scopes.length) note.append(el('span', '', txt('skills.note.some_projects')));
     }
     if (note.childElementCount) main.append(note);
     row.append(skSwitch(on, (v) => skApply(v ? 'on' : 'off', it.id)));
@@ -158,22 +156,22 @@ function renderSkills() {
     return b;
   };
   $('#sk-cats').replaceChildren(...(cats.length
-    ? [chip('', '전체', null), ...cats.map((c) => chip(c.name, SK_CATS[c.name] || c.name, c.count))]
+    ? [chip('', txt('skills.cat.all'), null), ...cats.map((c) => chip(c.name, skCatName(c.name), c.count))]
     : []));
 
   const res = $('#sk-results');
   const q = $('#sk-q').value.trim();
-  $('#sk-q').placeholder = `이름·설명·만든 사람으로 검색 (${m.total.toLocaleString()}개)`;
+  $('#sk-q').placeholder = txt('skills.search_ph', { n: m.total.toLocaleString() });
   const rows = m.results.map((r) => {
     const { row } = skRow(r.name, r.market, r.description, r.installs, r.author);
     if (skBusy === r.id) row.classList.add('busy');
-    const b = el('button', 'act', skBusy === r.id ? '설치 중…' : local ? '이 프로젝트에 추가' : '추가');
+    const b = el('button', 'act', skBusy === r.id ? txt('skills.installing') : local ? txt('skills.add_project') : txt('skills.add'));
     b.onclick = () => skApply('on', r.id);
     row.append(b);
     return row;
   });
-  if (m.found > m.results.length) rows.push(el('div', 'side-empty', `${m.found - m.results.length}개 더 있어요 · 검색어를 더 적어 보세요`));
-  if (!rows.length) rows.push(el('div', 'side-empty', q || skCat ? '찾는 스킬이 없어요' : '추가할 수 있는 스킬이 없어요'));
+  if (m.found > m.results.length) rows.push(el('div', 'side-empty', txt('skills.more', { n: m.found - m.results.length })));
+  if (!rows.length) rows.push(el('div', 'side-empty', q || skCat ? txt('skills.none_found') : txt('skills.none_addable')));
   res.replaceChildren(...rows);
 }
 
@@ -189,7 +187,7 @@ function onSkills(m) {
 function onSkillDone(m) {
   skBusy = null;
   if (m.error) toast(m.error, 7000);
-  else toast(`✓ ${m.msg} · 새로 여는 Claude 대화부터 적용돼요`, 4000);
+  else toast(txt('skills.applied', { msg: m.msg }), 4000);
   renderSkills();
   skRequest();
 }
@@ -197,7 +195,7 @@ function onSkillDone(m) {
 for (const b of document.querySelectorAll('.sk-scope button')) {
   b.onclick = () => {
     skScope = b.dataset.scope; store('zd-sk-scope', skScope);
-    skData = null; $('#sk-list').replaceChildren(el('div', 'side-empty', '불러오는 중…'));
+    skData = null; $('#sk-list').replaceChildren(el('div', 'side-empty', txt('skills.loading')));
     renderSkillScope(); skRequest();
   };
 }
@@ -206,7 +204,7 @@ $('#sk-q').oninput = () => { clearTimeout(skQTimer); skQTimer = setTimeout(skReq
 $('#sk-add').onsubmit = (e) => {
   e.preventDefault();
   const repo = $('#sk-repo').value.trim().replace(/^https?:\/\/github\.com\//, '').replace(/\.git$/, '').replace(/\/+$/, '');
-  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) { toast('GitHub 저장소를 owner/repo 형식으로 적어 주세요'); return; }
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) { toast(txt('skills.repo_format')); return; }
   skApply('market_add', repo);
   $('#sk-repo').value = '';
 };
