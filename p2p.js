@@ -99,6 +99,7 @@ let closed = false;
 const fin = (reason) => {
 if (closed) return;
 closed = true;
+clearTimeout(lostTimer);
 sock.readyState = 3;
 try { pc && pc.close(); } catch {}
 sock.onclose && sock.onclose({ reason: reason || '' });
@@ -106,6 +107,18 @@ sock.onclose && sock.onclose({ reason: reason || '' });
 sock.send = (s) => { if (dc && dc.readyState === 'open') dc.send(s); };
 Object.defineProperty(sock, 'bufferedAmount', { get: () => (dc ? dc.bufferedAmount : 0) });
 sock.close = () => fin('closed');
+sock.started = Date.now();
+const healthy = () => !!pc && (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed');
+let lostTimer = 0;
+const watch = () => {
+clearTimeout(lostTimer);
+if (sock.readyState !== 1 || healthy()) return;
+lostTimer = setTimeout(() => { if (!healthy()) fin('lost'); }, 4000);
+};
+sock.check = (moved) => {
+if (sock.readyState === 0 && moved && Date.now() - sock.started > 1500) fin('lost');
+else watch();
+};
 (async () => {
 status('연결 준비 중… (릴레이 확인)');
 const relay = await iceServers(desk, relays);
@@ -128,9 +141,13 @@ sock.onmessage && sock.onmessage({ data });
 dc.onclose = () => fin('channel closed');
 let mine = '';
 let theirs = '';
-pc.oniceconnectionstatechange = () => status(`직접 연결 시도 중… (ICE: ${pc.iceConnectionState})\n이 기기: ${mine}\n데스크탑: ${theirs}`);
+pc.oniceconnectionstatechange = () => {
+if (sock.readyState === 1) return watch();
+status(`직접 연결 시도 중… (ICE: ${pc.iceConnectionState})\n이 기기: ${mine}\n데스크탑: ${theirs}`);
+};
 pc.onconnectionstatechange = () => {
 if (pc.connectionState !== 'failed') return;
+if (sock.readyState === 1) return fin('lost');
 const hint = relay.length ? '' : '\n\n데스크탑 앱의 설정 › 리모트에서 릴레이(TURN)를 켜면 LTE·5G에서도 연결돼요.';
 fin(`연결에 실패했어요 (이 기기: ${mine} / 데스크탑: ${theirs})${hint}`);
 };
