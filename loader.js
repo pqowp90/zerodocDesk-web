@@ -21,7 +21,10 @@ s.taken = true;
 s.replay = () => { for (const e of boot.pending.splice(0)) s.onmessage && s.onmessage(e); };
 return s;
 },
-forget(pub) { saveDesks(desks().filter((d) => d.pub !== pub)); },
+forget(pub) {
+saveDesks(desks().filter((d) => d.pub !== pub));
+try { if (JSON.parse(load('zd-desk') || 'null')?.pub === pub) store('zd-desk', null); } catch {}
+},
 onWebui: null,
 push: true,
 openTab: null,
@@ -44,15 +47,15 @@ if (!Array.isArray(list)) list = [];
 if (!list.length) {
 try {
 const d = JSON.parse(load('zd-desk') || 'null');
-if (d && d.pub) list = [{ pub: d.pub, relays: d.relays || [], name: 'DeskDoc' }];
+if (d && d.pub) list = [{ pub: d.pub, url: d.url, name: 'DeskDoc' }];
 } catch {}
 }
-return list.filter((d) => d && HEX.test(d.pub) && Array.isArray(d.relays));
+return list.filter((d) => d && HEX.test(d.pub) && typeof d.url === 'string');
 }
 function saveDesks(list) { store('zd-desks', JSON.stringify(list)); }
 function useDesk(d) {
 saveDesks([d, ...desks().filter((x) => x.pub !== d.pub)]);
-store('zd-desk', JSON.stringify({ pub: d.pub, relays: d.relays }));
+store('zd-desk', JSON.stringify({ pub: d.pub, url: d.url }));
 try { sessionStorage.setItem('zd-picked', d.pub); } catch {}
 }
 function screen({ msg, pick = false, paste = false, retry = false, other = false }) {
@@ -95,20 +98,20 @@ async function pairWith(p) {
 const d = p.get('d');
 const s = p.get('s');
 const k = p.get('k');
-const relays = (p.get('r') || '').split(',').filter(Boolean);
-if (!d || !HEX.test(d) || !(s || k) || (k && !HEX.test(k))) return '링크가 올바르지 않아요';
+const url = p.get('u') || '';
+if (!d || !HEX.test(d) || !(s || k) || (k && !HEX.test(k)) || !/^wss?:\/\/./.test(url)) return '링크가 올바르지 않아요';
 const name = p.get('n') || desks().find((x) => x.pub === d)?.name || 'DeskDoc';
 if (k) {
 store('zd-sk', k);
 } else {
 screen({ msg: `${name}와 짝을 맺는 중…` });
 try {
-if (!(await ZDP2P.pair(d, relays, s))) return 'QR이 만료됐거나 이미 사용됐어요. 데스크탑에서 새 QR을 만들어 주세요.';
+if (!(await ZDP2P.pair(d, url, s))) return 'QR이 만료됐거나 이미 사용됐어요. 데스크탑에서 새 QR을 만들어 주세요.';
 } catch (e) {
 return e.message;
 }
 }
-useDesk({ pub: d, relays, name });
+useDesk({ pub: d, url, name });
 return '';
 }
 const bytes = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -179,12 +182,12 @@ boot.openTab = tab;
 go(d);
 }
 let attempt = 0;
-function go(d) {
+function go(d, tries = 0) {
 const gen = ++attempt;
 const others = desks().length > 1;
 useDesk(d);
 screen({ msg: `${d.name}에 연결하는 중…`, other: others });
-const sock = ZDP2P.connect(d.pub, d.relays);
+const sock = ZDP2P.connect(d.pub, d.url);
 boot.sock = sock;
 boot.pending = [];
 let started = false;
@@ -246,6 +249,11 @@ const msg = `${d.name}: 이 기기는 짝 맺기가 해제됐어요. 데스크�
 const left = desks();
 if (left.length) pick(left, msg);
 else unpaired(msg);
+return;
+}
+if (tries < 2 && !(sock.lastError && sock.lastError.final)) {
+screen({ msg: `${d.name}에 다시 연결하는 중…\n\n${ev.reason || ''}`, other: others });
+setTimeout(() => { if (gen === attempt) go(d, tries + 1); }, 1500 * (tries + 1));
 return;
 }
 screen({ msg: `${d.name}에 연결하지 못했어요\n\n${ev.reason || ''}`, retry: true, other: others });
