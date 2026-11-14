@@ -195,6 +195,7 @@ const fin = (reason) => {
 if (closed) return;
 closed = true;
 clearTimeout(lostTimer);
+clearTimeout(probeTimer);
 sock.readyState = 3;
 try { rv && rv.close(); } catch {}
 try { pc && pc.close(); } catch {}
@@ -213,7 +214,16 @@ lostTimer = setTimeout(() => { if (!healthy()) fin('lost'); }, 4000);
 };
 sock.check = (moved) => {
 if (sock.readyState === 0 && moved && Date.now() - sock.started > 1500) fin('lost');
-else watch();
+else { watch(); probe(); }
+};
+let heard = 0;
+let probeTimer = 0;
+const probe = () => {
+if (sock.readyState !== 1 || !dc || dc.readyState !== 'open') return;
+clearTimeout(probeTimer);
+const before = heard;
+sock.send('{"t":"ping"}');
+probeTimer = setTimeout(() => { if (heard === before) fin('lost'); }, 3000);
 };
 (async () => {
 status('연결 준비 중… (데스크탑 찾는 중)');
@@ -228,6 +238,7 @@ dc.binaryType = 'arraybuffer';
 dc.onopen = () => { sock.readyState = 1; sock.onopen && sock.onopen(); };
 let part = '';
 dc.onmessage = (e) => {
+heard++;
 let data = e.data;
 if (typeof data === 'string' && data.charCodeAt(0) === 1) {
 part += data.slice(2);
