@@ -26,15 +26,9 @@
 <div id="code"></div>
 <div class="row">
 <button type="button" id="ask-again">다시 요청</button>
-<button type="button" id="ask-pin">PIN으로 연결</button>
 <button type="button" id="ask-cancel">취소</button>
 </div>
 </div>
-<form id="pin" hidden>
-<input type="password" inputmode="numeric" autocomplete="off" maxlength="12" placeholder="PIN">
-<button type="submit">연결</button>
-<button type="button" id="pin-cancel">취소</button>
-</form>
 <form id="paste" hidden>
 <input type="url" placeholder="https://… 링크 붙여넣기" autocomplete="off">
 <button type="submit">연결</button>
@@ -44,7 +38,7 @@
 <button type="button" id="other" hidden>다른 PC</button>
 </div>
 </main>
-<script src="cpace.js"></script>
+<script src="ask.js"></script>
 <script src="p2p.js"></script>
 <script src="loader.js"></script>
 </body>

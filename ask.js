@@ -116,35 +116,22 @@ for (const p of parts) { out.set(p, i); i += p.length; }
 return out;
 };
 const sha = async (alg, data) => new Uint8Array(await crypto.subtle.digest(alg, data));
-const pinKey = (room, pin) => sha('SHA-256', enc.encode(`zd-pin1|${room}|${pin}`));
-async function generator(room, sid, pk, label = 'zd-cpace1') {
-return fromUniform(await sha('SHA-512', concat(enc.encode(`${label} gen|${room}|${sid}`), pk)));
+async function generator(room, sid) {
+return fromUniform(await sha('SHA-512', enc.encode(`zd-ask1 gen|${room}|${sid}`)));
 }
-async function begin(label, room, sid, extra, wide) {
+async function start(room, sid, wide) {
 const a = le(wide || crypto.getRandomValues(new Uint8Array(64))) % L;
-const ya = encode(mul(await generator(room, sid, extra, label), a));
+const ya = encode(mul(await generator(room, sid), a));
+const commit = await sha('SHA-256', concat(enc.encode(`zd-ask1 commit|${room}|${sid}|`), ya));
 return {
 ya,
+commit,
 async finish(yb) {
 const p = decode(yb);
 if (!p || isZero(p)) return null;
 const k = mul(p, a);
 if (isZero(k)) return null;
-const h = await sha('SHA-512', concat(enc.encode(`${label} isk|${room}|${sid}|`), ya, yb, encode(k)));
-return h.subarray(0, 32);
-},
-};
-}
-const start = (room, sid, pk, wide) => begin('zd-cpace1', room, sid, pk, wide);
-async function askStart(room, sid, wide) {
-const run = await begin('zd-ask1', room, sid, new Uint8Array(0), wide);
-const commit = await sha('SHA-256', concat(enc.encode(`zd-ask1 commit|${room}|${sid}|`), run.ya));
-return {
-ya: run.ya,
-commit,
-async finish(yb) {
-const isk = await run.finish(yb);
-if (!isk) return null;
+const isk = (await sha('SHA-512', concat(enc.encode(`zd-ask1 isk|${room}|${sid}|`), ya, yb, encode(k)))).subarray(0, 32);
 const h = await sha('SHA-256', concat(enc.encode('zd-ask1 code|'), isk));
 const n = ((h[0] << 24) | (h[1] << 16) | (h[2] << 8) | h[3]) >>> 0;
 return { isk, code: String(n % 1000000).padStart(6, '0') };
@@ -156,5 +143,5 @@ const y = mod(4n * pow(5n, P - 2n));
 const { r: x } = sqrtRatioM1(mod(y * y - 1n), mod(D * y * y + 1n));
 return [x, y, 1n, mod(x * y)];
 }
-window.ZDCPACE = { pinKey, start, askStart, _g: async (room, sid, pk) => encode(await generator(room, sid, pk)), _basepoint: async () => encode(basepoint()) };
+window.ZDASK = { start, _basepoint: async () => encode(basepoint()) };
 })();

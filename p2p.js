@@ -95,7 +95,7 @@ rv.deskOn = !!m.on;
 dispatch(m);
 } else if (m.t === 'down' && m.denied) {
 dispatch({ t: 'denied' });
-} else if (m.t === 'down' && typeof m.m === 'string' && /^(cpace|ask)\./.test(m.m)) {
+} else if (m.t === 'down' && typeof m.m === 'string' && m.m.startsWith('ask.')) {
 const dot = m.m.indexOf('.');
 let msg = null;
 try { msg = JSON.parse(dec.decode(unb64(m.m.slice(dot + 1)))); } catch {}
@@ -159,48 +159,14 @@ return m.t === 'sealed' && m.msg.type === 'paired' ? true : undefined;
 rv.close();
 }
 }
-const PIN_WHY = {
-pin: 'PIN이 맞지 않아요.',
-locked: 'PIN을 여러 번 틀려서 10분 동안 막혔어요. 잠시 뒤 다시 해 주세요.',
-no_pin: '이 PC에 PIN이 없어요. PC의 [설정] → [리모트]에서 PIN을 정하거나 QR로 연결해 주세요.',
-no_login: '이 PC가 제로독 계정에 로그인되어 있지 않아요.',
-account: '이 PC는 지금 로그인한 계정의 PC가 아니에요. 다시 로그인해 주세요.',
-unreachable: 'PC가 계정 서버에 닿지 못해요. 잠시 뒤 다시 해 주세요.',
-expired: '시간이 지났어요. 다시 해 주세요.',
-};
-async function pinPair(room, url, pin, token) {
-const rv = await session(url, room);
-try {
-if (!rv.deskOn) await rv.wait((m) => (m.t === 'desk' && m.on ? true : undefined), 8000, OFFLINE);
-const sid = hex(crypto.getRandomValues(new Uint8Array(16)));
-const run = await ZDCPACE.start(room, sid, await ZDCPACE.pinKey(room, pin));
-const reply = (m) => {
-if (m.t === 'err' || (m.t === 'desk' && !m.on)) throw new Error(OFFLINE);
-if (m.t === 'closed') throw new Error('만남 서버 연결이 끊겼어요');
-if (m.t === 'denied') throw new Error('데스크탑이 응답을 거절했어요. 다시 해 주세요.');
-if (m.t === 'cpace' && m.msg.sid === sid && m.msg.type === 'cpace_err') throw new Error(PIN_WHY[m.msg.why] || '연결하지 못했어요.');
-return undefined;
-};
-const start = { sid, ya: hex(run.ya), token };
-rv.ws.send(JSON.stringify({ t: 'up', m: `cpace.${b64(enc.encode(JSON.stringify(start)))}` }));
-const m = await rv.wait((m) => reply(m) ?? (m.t === 'cpace' && m.msg.sid === sid && m.msg.type === 'cpace' ? m.msg : undefined), 20000, '데스크탑이 응답하지 않아요 (앱이 켜져 있는지 확인)');
-const isk = /^[0-9a-f]{64}$/.test(m.yb || '') ? await run.finish(unhex(m.yb)) : null;
-if (!isk) throw new Error('데스크탑의 답이 올바르지 않아요');
-const id = `cp${sid}`;
-rv.ws.send(JSON.stringify({ t: 'up', m: await seal(isk, room, 'up', id, { type: 'pin_key', key: hex(rv.key), name: deviceName() }) }));
-await rv.wait((m) => reply(m) ?? (m.t === 'sealed' && m.msg.type === 'paired' ? true : undefined), 20000, '데스크탑이 응답하지 않아요 (앱이 켜져 있는지 확인)');
-} finally {
-rv.close();
-}
-}
 const ASK_WHY = {
 denied: '연결을 거절했어요.',
 expired: '2분 안에 허용되지 않았어요. 다시 요청해 주세요.',
 busy: 'PC에 기다리는 연결 요청이 너무 많아요. 잠시 뒤 다시 해 주세요.',
 bad: '요청이 오가는 중에 바뀌었어요. 다시 요청해 주세요.',
-no_login: PIN_WHY.no_login,
-account: PIN_WHY.account,
-unreachable: PIN_WHY.unreachable,
+no_login: '이 PC가 제로독 계정에 로그인되어 있지 않아요.',
+account: '이 PC는 지금 로그인한 계정의 PC가 아니에요. 다시 로그인해 주세요.',
+unreachable: 'PC가 계정 서버에 닿지 못해요. 잠시 뒤 다시 해 주세요.'
 };
 async function askPair(room, url, token, onCode, signal) {
 const rv = await session(url, room);
@@ -215,7 +181,7 @@ if (signal) signal.addEventListener('abort', cancel);
 const ping = setInterval(() => { try { rv.ws.send('ping'); } catch {} }, 25000);
 try {
 if (!rv.deskOn) await rv.wait((m) => (m.t === 'desk' && m.on ? true : undefined), 8000, OFFLINE);
-const run = await ZDCPACE.askStart(room, sid);
+const run = await ZDASK.start(room, sid);
 const reply = (m) => {
 if (m.t === 'err' || (m.t === 'desk' && !m.on)) throw new Error(OFFLINE);
 if (m.t === 'closed') throw new Error('만남 서버 연결이 끊겼어요');
@@ -367,5 +333,5 @@ setTimeout(() => { if (sock.readyState === 0) fin(`20초 안에 연결되지 않
 })().catch((e) => { sock.lastError = e; fin(e.message); });
 return sock;
 }
-window.ZDP2P = { pair, pinPair, askPair, connect, _seal: { hkdf, pairKey, deviceKey, deviceId, seal, open, hex } };
+window.ZDP2P = { pair, askPair, connect, _seal: { hkdf, pairKey, deviceKey, deviceId, seal, open, hex } };
 })();

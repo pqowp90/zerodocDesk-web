@@ -59,11 +59,10 @@ saveDesks([d, ...desks().filter((x) => x.pub !== d.pub)]);
 store('zd-desk', JSON.stringify({ pub: d.pub, url: d.url }));
 try { sessionStorage.setItem('zd-picked', d.pub); } catch {}
 }
-function screen({ msg, pick = false, paste = false, retry = false, other = false, pin = false, ask = false }) {
+function screen({ msg, pick = false, paste = false, retry = false, other = false, ask = false }) {
 $('#msg').textContent = msg;
 $('#pick').hidden = !pick;
 $('#acct').hidden = !pick || !$('#acct').childElementCount;
-$('#pin').hidden = !pin;
 $('#ask').hidden = !ask;
 $('#paste').hidden = !paste;
 $('#retry').hidden = !retry;
@@ -140,10 +139,8 @@ if (gen !== attempt) return;
 screen({ msg, ask: true });
 $('#code').textContent = code;
 $('#ask-again').hidden = !failed;
-$('#ask-pin').hidden = !a.pin;
 };
 $('#ask-again').onclick = () => askScreen(a);
-$('#ask-pin').onclick = () => { ctl.abort(); pinScreen(a); };
 $('#ask-cancel').onclick = () => { ctl.abort(); attempt++; pick(desks()); };
 show(`${a.name}에 연결 요청을 보내는 중…`, '');
 (async () => {
@@ -160,33 +157,6 @@ if (gen !== attempt) return;
 useDesk({ pub: a.room, url: rv, name: a.name });
 go(desks()[0]);
 })();
-}
-function pinScreen(a) {
-attempt++;
-screen({ msg: `${a.name}의 PIN을 넣어 주세요\n(PC의 [설정] → [리모트]에서 정한 숫자)`, pin: true });
-const input = $('#pin input');
-input.value = '';
-input.focus();
-$('#pin-cancel').onclick = () => pick(desks());
-$('#pin').onsubmit = async (e) => {
-e.preventDefault();
-const pin = input.value.trim();
-if (!/^[0-9]{6,12}$/.test(pin)) { screen({ msg: 'PIN은 숫자 6~12자리예요', pin: true }); return; }
-const gen = ++attempt;
-screen({ msg: `${a.name}와 짝을 맺는 중…` });
-try {
-const { rv, token } = await freshAccount();
-await ZDP2P.pinPair(a.room, rv, pin, token);
-} catch (err) {
-if (gen !== attempt) return;
-screen({ msg: `${a.name}: ${err.message}`, pin: true });
-input.value = '';
-return;
-}
-if (gen !== attempt) return;
-useDesk({ pub: a.room, url: acct.rv, name: a.name });
-go(desks()[0]);
-};
 }
 $('#other').onclick = () => { attempt++; boot.sock?.close(); pick(desks()); };
 $('#paste').onsubmit = async (e) => {
