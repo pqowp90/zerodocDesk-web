@@ -7,6 +7,7 @@ const HEX = /^[0-9a-f]{64}$/;
 const CACHE = 'zd-webui';
 const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 const iOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const ACCOUNTS = (load('zd-accounts') || 'https://accounts.zerodoc.kr').replace(/\/+$/, '');
 const boot = {
 hash: '',
 desk: null,
@@ -58,32 +59,134 @@ saveDesks([d, ...desks().filter((x) => x.pub !== d.pub)]);
 store('zd-desk', JSON.stringify({ pub: d.pub, url: d.url }));
 try { sessionStorage.setItem('zd-picked', d.pub); } catch {}
 }
-function screen({ msg, pick = false, paste = false, retry = false, other = false }) {
+function screen({ msg, pick = false, paste = false, retry = false, other = false, pin = false, ask = false }) {
 $('#msg').textContent = msg;
 $('#pick').hidden = !pick;
+$('#acct').hidden = !pick || !$('#acct').childElementCount;
+$('#pin').hidden = !pin;
+$('#ask').hidden = !ask;
 $('#paste').hidden = !paste;
 $('#retry').hidden = !retry;
 $('#other').hidden = !other;
 $('#acts').hidden = !(retry || other);
 }
 function unpaired(err) {
-const help = '데스크탑 앱의 [설정] → [리모트] → "새 기기 연결 QR"을 이 기기로 찍어 주세요';
-if (!standalone) { screen({ msg: err ? `${err}\n\n${help}` : help }); return; }
+const help = '데스크탑 앱의 [설정] → [리모트] → "새 기기 연결 QR"을 이 기기로 찍거나, 아래에서 제로독 계정의 PC를 골라 주세요';
+if (!standalone) { pick([], err ? `${err}\n\n${help}` : help); return; }
 const how = iOS
-? 'Safari에서 짝을 맺었다면 Safari의 [설정] → [화면] → "홈 화면 앱으로 연결 옮기기"로 복사한 링크를 붙여넣어 주세요.\n처음이라면 데스크탑 QR을 카메라로 찍어 Safari에서 먼저 짝을 맺어 주세요.'
-: '데스크탑 QR을 카메라로 찍거나, 복사한 연결 링크를 붙여넣어 주세요.';
-screen({ msg: err ? `${err}\n\n${how}` : how, paste: true });
+? 'Safari에서 짝을 맺었다면 Safari의 [설정] → [화면] → "홈 화면 앱으로 연결 옮기기"로 복사한 링크를 붙여넣어 주세요.\n처음이라면 데스크탑 QR을 카메라로 찍어 Safari에서 먼저 짝을 맺거나, 아래에서 제로독 계정의 PC를 골라 주세요.'
+: '데스크탑 QR을 카메라로 찍거나, 복사한 연결 링크를 붙여넣거나, 아래에서 제로독 계정의 PC를 골라 주세요.';
+pick([], err ? `${err}\n\n${how}` : how, true);
 }
-function pick(list, msg) {
-const box = $('#pick');
-box.textContent = '';
-for (const d of list) {
+let acct;
+async function fetchAccount() {
+try {
+const r = await fetch(`${ACCOUNTS}/api/desks`, { credentials: 'include', cache: 'no-store' });
+if (r.status === 401) return (acct = null);
+if (!r.ok) return (acct = undefined);
+const v = await r.json();
+if (!Array.isArray(v.desks) || typeof v.rv !== 'string' || typeof v.token !== 'string') return (acct = undefined);
+acct = { ...v, at: Date.now() };
+const named = desks().map((d) => {
+const a = v.desks.find((x) => x.room === d.pub);
+return a ? { ...d, name: a.name } : d;
+});
+saveDesks(named);
+return acct;
+} catch {
+return (acct = undefined);
+}
+}
+function button(label, sub, onclick) {
 const b = Object.assign(document.createElement('button'), { type: 'button' });
-b.append(d.name, Object.assign(document.createElement('small'), { textContent: d.pub.slice(0, 8) }));
-b.onclick = () => go(d);
-box.append(b);
+b.append(label);
+if (sub) b.append(Object.assign(document.createElement('small'), { textContent: sub }));
+b.onclick = onclick;
+return b;
 }
-screen({ msg: msg || '어느 PC에 연결할까요?', pick: true });
+function pick(list, msg, paste = false) {
+const box = $('#pick');
+const draw = () => {
+box.textContent = '';
+for (const d of list) box.append(button(d.name, d.pub.slice(0, 8), () => go(d)));
+const more = $('#acct');
+more.textContent = '';
+if (acct) {
+for (const a of acct.desks.filter((a) => !list.some((d) => d.pub === a.room))) {
+more.append(button(a.name, `${a.app} · 처음 한 번 허용받고 연결`, () => askScreen(a)));
+}
+more.append(Object.assign(document.createElement('small'), { textContent: `제로독 계정: ${acct.email}` }));
+} else if (acct === null) {
+more.append(button('제로독 계정으로 내 PC 찾기', '같은 계정으로 로그인한 PC가 목록에 나와요', () => { location.href = `${ACCOUNTS}/desks/login`; }));
+}
+more.hidden = !more.childElementCount;
+};
+draw();
+screen({ msg: msg || '어느 PC에 연결할까요?', pick: true, paste });
+const shown = ++picking;
+fetchAccount().then(() => { if (shown === picking && !$('#pick').hidden) draw(); });
+}
+let picking = 0;
+async function freshAccount() {
+if (!acct || Date.now() - acct.at > 10 * 60 * 1000) await fetchAccount();
+if (!acct) throw new Error('제로독 계정 로그인이 끝났어요. 다시 로그인해 주세요.');
+return acct;
+}
+function askScreen(a) {
+const gen = ++attempt;
+const ctl = new AbortController();
+const show = (msg, code, failed = false) => {
+if (gen !== attempt) return;
+screen({ msg, ask: true });
+$('#code').textContent = code;
+$('#ask-again').hidden = !failed;
+$('#ask-pin').hidden = !a.pin;
+};
+$('#ask-again').onclick = () => askScreen(a);
+$('#ask-pin').onclick = () => { ctl.abort(); pinScreen(a); };
+$('#ask-cancel').onclick = () => { ctl.abort(); attempt++; pick(desks()); };
+show(`${a.name}에 연결 요청을 보내는 중…`, '');
+(async () => {
+let rv;
+try {
+const proof = await freshAccount();
+rv = proof.rv;
+await ZDP2P.askPair(a.room, rv, proof.token, (code) => show(`${a.name} 화면이나 이미 연결된 기기에서 허용을 눌러 주세요.\n그 화면에 이 번호가 보이는지 확인하세요.`, code), ctl.signal);
+} catch (err) {
+show(`${a.name}: ${err.message}`, '', true);
+return;
+}
+if (gen !== attempt) return;
+useDesk({ pub: a.room, url: rv, name: a.name });
+go(desks()[0]);
+})();
+}
+function pinScreen(a) {
+attempt++;
+screen({ msg: `${a.name}의 PIN을 넣어 주세요\n(PC의 [설정] → [리모트]에서 정한 숫자)`, pin: true });
+const input = $('#pin input');
+input.value = '';
+input.focus();
+$('#pin-cancel').onclick = () => pick(desks());
+$('#pin').onsubmit = async (e) => {
+e.preventDefault();
+const pin = input.value.trim();
+if (!/^[0-9]{6,12}$/.test(pin)) { screen({ msg: 'PIN은 숫자 6~12자리예요', pin: true }); return; }
+const gen = ++attempt;
+screen({ msg: `${a.name}와 짝을 맺는 중…` });
+try {
+const { rv, token } = await freshAccount();
+await ZDP2P.pinPair(a.room, rv, pin, token);
+} catch (err) {
+if (gen !== attempt) return;
+screen({ msg: `${a.name}: ${err.message}`, pin: true });
+input.value = '';
+return;
+}
+if (gen !== attempt) return;
+useDesk({ pub: a.room, url: acct.rv, name: a.name });
+go(desks()[0]);
+};
 }
 $('#other').onclick = () => { attempt++; boot.sock?.close(); pick(desks()); };
 $('#paste').onsubmit = async (e) => {
@@ -281,6 +384,12 @@ const list = desks();
 return list.length ? pick(list, err) : unpaired(err);
 }
 const q = new URLSearchParams(location.search);
+if (q.has('pick')) {
+history.replaceState(null, '', location.pathname);
+try { sessionStorage.removeItem('zd-picked'); } catch {}
+const list = desks();
+return list.length ? pick(list) : unpaired('');
+}
 const open = q.get('open');
 if (open) {
 history.replaceState(null, '', location.pathname);

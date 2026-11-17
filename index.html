@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' wss: ws://localhost:8799 ws://127.0.0.1:8799; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' wss: ws://localhost:8799 ws://127.0.0.1:8799 https://accounts.zerodoc.kr http://localhost:8799 http://127.0.0.1:8799; object-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content">
 <title>DeskDoc</title>
 <link rel="manifest" href="manifest.webmanifest">
@@ -21,6 +21,20 @@
 <h1>DeskDoc</h1>
 <p id="msg">불러오는 중…</p>
 <div id="pick" hidden></div>
+<div id="acct" hidden></div>
+<div id="ask" hidden>
+<div id="code"></div>
+<div class="row">
+<button type="button" id="ask-again">다시 요청</button>
+<button type="button" id="ask-pin">PIN으로 연결</button>
+<button type="button" id="ask-cancel">취소</button>
+</div>
+</div>
+<form id="pin" hidden>
+<input type="password" inputmode="numeric" autocomplete="off" maxlength="12" placeholder="PIN">
+<button type="submit">연결</button>
+<button type="button" id="pin-cancel">취소</button>
+</form>
 <form id="paste" hidden>
 <input type="url" placeholder="https://… 링크 붙여넣기" autocomplete="off">
 <button type="submit">연결</button>
@@ -30,6 +44,7 @@
 <button type="button" id="other" hidden>다른 PC</button>
 </div>
 </main>
+<script src="cpace.js"></script>
 <script src="p2p.js"></script>
 <script src="loader.js"></script>
 </body>
