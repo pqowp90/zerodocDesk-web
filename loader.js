@@ -369,6 +369,12 @@ if (d) {
 boot.openTab = q.has('tab') && Number.isInteger(tab) ? tab : null;
 return go(d);
 }
+if (HEX.test(open)) {
+const a = (await fetchAccount())?.desks.find((x) => x.room === open);
+if (a) return askScreen(a);
+const list = desks();
+return list.length ? pick(list) : unpaired('');
+}
 }
 const list = desks();
 if (!list.length) return unpaired('');
